@@ -7,29 +7,29 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class SynoPermissionResponse {
 
 	@JsonProperty("_id")
-	private int id;
+	private String id;
 
 	@JsonProperty("_parent")
-	private Integer parent;
+	private String parent;
 
 	private String title;
 	private boolean browse;
 	private boolean manage;
 	private boolean upload;
 
-	public int getId() {
+	public String getId() {
 		return id;
 	}
 
-	public void setId(final int id) {
+	public void setId(final String id) {
 		this.id = id;
 	}
 
-	public Integer getParent() {
+	public String getParent() {
 		return parent;
 	}
 
-	public void setParent(final Integer parent) {
+	public void setParent(final String parent) {
 		this.parent = parent;
 	}
 

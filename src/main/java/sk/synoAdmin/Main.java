@@ -4,22 +4,32 @@ import java.io.File;
 
 import sk.synoAdmin.engine.RightEngine;
 import sk.synoAdmin.prefs.Preferences;
+import sk.synoAdmin.synology.SynoApiClient;
 
 public class Main {
 
 	private static String rootFolder;
 
 	public static void main(final String[] args) {
+		final long start = System.nanoTime();
+
 		init(args);
 //		createPrefs();
+
 		final Preferences pref = Preferences.fromFile(rootFolder);
+
+		final long endPref = System.nanoTime();
+		System.out.println("Prefs time : " + (endPref - start) / 1000000);
+
 		final RightEngine re = new RightEngine(pref);
 
 		re.init();
-//
-//		re.dbToFs();
 
-		System.out.println("End");
+//		re.dbToFs();
+		re.fsToDb();
+
+		final long end = System.nanoTime();
+		System.out.println("End (total : " + (end - start) / 1000000 + ")");
 	}
 
 	private static void init(final String[] args) {
@@ -38,7 +48,9 @@ public class Main {
 	private static void createPrefs() {
 		final Preferences pref = Preferences.fromPrompt(rootFolder);
 
-		// TODO : check successfull
+		new SynoApiClient(pref); // test d'accès à l'API
+		// TODO : check groups
+
 		pref.toFile();
 	}
 

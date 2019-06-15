@@ -1,6 +1,5 @@
 package sk.synoAdmin.engine;
 
-import java.io.File;
 import java.io.FilenameFilter;
 
 public class Group {
@@ -25,11 +24,7 @@ public class Group {
 	}
 
 	public String getFileName() {
-		return name + FILE_EXT;
-	}
-
-	public boolean match(final File file) {
-		return file.getName().equalsIgnoreCase(getFileName());
+		return "@" + name + FILE_EXT;
 	}
 
 }

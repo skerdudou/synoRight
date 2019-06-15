@@ -11,7 +11,7 @@ public class Folder {
 		this.parent = parent;
 	}
 
-	private Integer id;
+	private String id;
 	private final Folder parent;
 
 	private final File folder;
@@ -20,11 +20,11 @@ public class Folder {
 	private final List<Group> fsGroups = new ArrayList<>();
 	private final List<Group> dbGroups = new ArrayList<>();
 
-	public Integer getId() {
+	public String getId() {
 		return id;
 	}
 
-	public void setId(final Integer id) {
+	public void setId(final String id) {
 		if (this.id != null && !this.id.equals(id)) {
 			throw new RuntimeException("Les ID sont non concordants entre les appels");
 		}
@@ -47,8 +47,8 @@ public class Folder {
 		return name;
 	}
 
-	public File getFolder() {
-		return folder;
+	public String getFolderPath() {
+		return folder.getAbsolutePath();
 	}
 
 	public void addFsGroup(final Group group) {
@@ -59,7 +59,7 @@ public class Folder {
 		dbGroups.add(group);
 	}
 
-	public boolean matchParentId(final Integer id) {
+	public boolean matchParentId(final String id) {
 		if (parent == null) {
 			return true;
 		}

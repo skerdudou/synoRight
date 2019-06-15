@@ -8,23 +8,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import sk.synoAdmin.UserException;
+import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.SynoApiClient;
 import sk.synoAdmin.synology.pojo.SynoPermissionResponse;
 
 public class RightEngine {
 
-	private final String rootPath = "\\\\NAS\\photo";
+	private final Preferences pref;
 	private final SynoApiClient synoClient = new SynoApiClient();
 
 	private final List<Folder> folders = new ArrayList<>();
 	private final List<Group> groups = new ArrayList<>();
 
-	public RightEngine() {
+	public RightEngine(final Preferences pref) {
+		this.pref = pref;
 		groups.add(new Group("65536", "kerdudou"));
 		groups.add(new Group("65537", "godmez"));
 
-		synoClient.login("Steven", "***");
+		synoClient.login(pref.getUser(), pref.getPassword());
 	}
 
 	public void init() {
@@ -79,11 +80,9 @@ public class RightEngine {
 	}
 
 	private void readFs() {
-		final File root = new File(rootPath);
+		final File root = new File(pref.getRootPath());
 
 		scanFolder(0, root, null);
-
-		System.out.println(folders.size());
 	}
 
 	private void scanFolder(final int level, final File folder, final Folder parent) {
@@ -126,7 +125,7 @@ public class RightEngine {
 						.findAny();
 
 				if (!folder.isPresent()) {
-					throw new UserException("Impossible de matcher les droits de '" + synoFolderRight.getTitle() + "' avec le fileSystem");
+					throw new RuntimeException("Impossible de matcher les droits de '" + synoFolderRight.getTitle() + "' avec le fileSystem");
 				}
 
 				foldersToScan.remove(folder.get());

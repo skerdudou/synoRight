@@ -25,8 +25,13 @@ public class Main {
 
 		re.init();
 
+		final long startMaj = System.nanoTime();
+
 //		re.dbToFs();
 		re.fsToDb();
+
+		final long endMaj = System.nanoTime();
+		System.out.println("Maj time : " + (endMaj - startMaj) / 1000000);
 
 		final long end = System.nanoTime();
 		System.out.println("End (total : " + (end - start) / 1000000 + ")");

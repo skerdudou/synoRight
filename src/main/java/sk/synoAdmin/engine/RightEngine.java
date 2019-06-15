@@ -18,12 +18,9 @@ public class RightEngine {
 	private final SynoApiClient synoClient = new SynoApiClient();
 
 	private final List<Folder> folders = new ArrayList<>();
-	private final List<Group> groups = new ArrayList<>();
 
 	public RightEngine(final Preferences pref) {
 		this.pref = pref;
-		groups.add(new Group("65536", "kerdudou"));
-		groups.add(new Group("65537", "godmez"));
 
 		synoClient.login(pref.getUser(), pref.getPassword());
 	}
@@ -101,7 +98,7 @@ public class RightEngine {
 
 	private void updateFsRight(final Folder folder) {
 		for (final File file : folder.getFolder().listFiles(Group.FILE_FILTER)) {
-			groups.stream()
+			pref.getGroups().stream()
 					.filter(g -> g.match(file))
 					.findAny()
 					.ifPresent(g -> folder.addFsGroup(g));
@@ -110,7 +107,7 @@ public class RightEngine {
 	}
 
 	private void readDb() {
-		for (final Group grp : groups) {
+		for (final Group grp : pref.getGroups()) {
 			final List<Folder> foldersToScan = new ArrayList<>(folders);
 
 			for (final SynoPermissionResponse synoFolderRight : synoClient.getAccessRight(grp.getId()).getAll()) {

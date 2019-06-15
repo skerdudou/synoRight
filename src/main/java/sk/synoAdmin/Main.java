@@ -11,7 +11,7 @@ public class Main {
 
 	public static void main(final String[] args) {
 		init(args);
-
+//		createPrefs();
 		final Preferences pref = Preferences.fromFile(rootFolder);
 		final RightEngine re = new RightEngine(pref);
 

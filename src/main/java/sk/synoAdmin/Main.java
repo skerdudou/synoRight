@@ -1,62 +1,75 @@
 package sk.synoAdmin;
 
-import java.io.File;
-
+import picocli.CommandLine;
+import sk.synoAdmin.CliParams.Actions;
 import sk.synoAdmin.engine.RightEngine;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.SynoApiClient;
 
 public class Main {
 
-	private static String rootFolder;
-
 	public static void main(final String[] args) {
 		final long start = System.nanoTime();
+		final CliParams cliParams = CommandLine.populateCommand(new CliParams(), args);
 
-		init(args);
-//		createPrefs();
+		if (cliParams.isUsageHelpRequested()) {
+			CommandLine.usage(cliParams, System.out);
+			return;
+		}
 
-		final Preferences pref = Preferences.fromFile(rootFolder);
+		final long endInit = System.nanoTime();
+		System.out.println("Init time : " + (endInit - start) / 1000000);
 
-		final long endPref = System.nanoTime();
-		System.out.println("Prefs time : " + (endPref - start) / 1000000);
+		if (Actions.INIT.equals(cliParams.getAction())) {
+			createPrefs();
+		} else {
+			final Preferences pref = readPrefs(cliParams);
 
-		final RightEngine re = new RightEngine(pref);
+			final RightEngine re = new RightEngine(pref);
+			re.init();
 
-		re.init();
+			final long startAction = System.nanoTime();
 
-		final long startMaj = System.nanoTime();
+			switch (cliParams.getAction()) {
+				case FULL_DB_TO_FS:
+					re.dbToFs();
+					break;
+				case FULL_FS_TO_DB:
+					re.fsToDb();
+					break;
+				case ADD_GRP:
+				case DEL_GRP:
+					break;
+				default:
+					throw new RuntimeException("Action non prise en charge");
+			}
 
-//		re.dbToFs();
-		re.fsToDb();
-
-		final long endMaj = System.nanoTime();
-		System.out.println("Maj time : " + (endMaj - startMaj) / 1000000);
+			final long endAction = System.nanoTime();
+			System.out.println("Action time : " + (endAction - startAction) / 1000000);
+		}
 
 		final long end = System.nanoTime();
 		System.out.println("End (total : " + (end - start) / 1000000 + ")");
 	}
 
-	private static void init(final String[] args) {
-		if (args.length != 1) {
-			throw new UserException("Attendu 1 paramètre : Le chemin vers le répertoire photo du NAS");
-		}
-
-		final File rootDir = new File(args[0]);
-		if (!rootDir.exists() || !rootDir.isDirectory()) {
-			throw new UserException("'" + args[0] + "' n'est pas un nom de répertoire valide.");
-		}
-
-		rootFolder = args[0];
-	}
-
 	private static void createPrefs() {
-		final Preferences pref = Preferences.fromPrompt(rootFolder);
+		final Preferences pref = Preferences.fromPrompt("./");
 
 		new SynoApiClient(pref); // test d'accès à l'API
 		// TODO : check groups
 
 		pref.toFile();
+	}
+
+	private static Preferences readPrefs(final CliParams cliParams) {
+		final long start = System.nanoTime();
+
+		final Preferences prefs = Preferences.fromFile(cliParams.getConfigFolder());
+
+		final long end = System.nanoTime();
+		System.out.println("Prefs time : " + (end - start) / 1000000);
+
+		return prefs;
 	}
 
 }

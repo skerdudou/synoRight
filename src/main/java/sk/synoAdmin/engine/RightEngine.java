@@ -42,7 +42,7 @@ public class RightEngine {
 	}
 
 	private void readFs() {
-		final File root = new File(pref.getRootPath());
+		final File root = new File(pref.getNasFolder());
 
 		scanFolder(0, root, null);
 	}

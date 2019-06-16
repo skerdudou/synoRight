@@ -6,8 +6,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -21,15 +19,18 @@ import sk.synoAdmin.engine.Group;
 public class Preferences {
 
 	public static final String PREF_FILE_NAME = ".synoRight";
+	public static final String CONFIG_FILENAME = "/config" + PREF_FILE_NAME + ".properties";
 
-	private final String rootPath;
+	private final String configPath;
+	private final String nasFolder;
 	private final String url;
 	private final String user;
 	private final String password;
 	private final List<Group> groups;
 
-	private Preferences(final String rootPath, final String url, final String user, final String password, final List<Group> groups) {
-		this.rootPath = rootPath;
+	private Preferences(final String configPath, final String nasFolder, final String url, final String user, final String password, final List<Group> groups) {
+		this.configPath = configPath;
+		this.nasFolder = nasFolder;
 		this.url = url;
 		this.user = user;
 		this.password = password;
@@ -39,14 +40,15 @@ public class Preferences {
 	/**
 	 * Lit les préférences dans du fichier.
 	 *
-	 * @param dir le répertoire racine des photos du NAS
+	 * @param configPath le répertoire contenant la configuration
 	 */
-	public static Preferences fromFile(final String dir) {
-		try (InputStream input = new FileInputStream(dir + "/" + PREF_FILE_NAME)) {
+	public static Preferences fromFile(final String configPath) {
+		try (InputStream input = new FileInputStream(configPath + "/" + CONFIG_FILENAME)) {
 
 			final Properties prop = new Properties();
 			prop.load(input);
 
+			final String folder = prop.getProperty("folder");
 			final String url = prop.getProperty("url");
 			final String user = prop.getProperty("user");
 			final String password = CryptoUtils.decrypt(prop.getProperty("password"));
@@ -68,7 +70,7 @@ public class Preferences {
 				groups.add(new Group(groupSplit[0], groupSplit[1]));
 			}
 
-			return new Preferences(dir, url, user, password, groups);
+			return new Preferences(configPath, folder, url, user, password, groups);
 
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible de lire les préférences", e);
@@ -78,8 +80,11 @@ public class Preferences {
 	/**
 	 * Construit un objet préférence à partir d'entrée utilisateur.
 	 */
-	public static Preferences fromPrompt(final String rootFolder) {
+	public static Preferences fromPrompt(final String configFolder) {
 		final Scanner userInput = new Scanner(System.in);
+
+		System.out.println("URL des photos sur le NAS :");
+		final String nasFolder = userInput.next();
 
 		System.out.println("URL d'accès à PhotoStation :");
 		final String url = userInput.next();
@@ -108,7 +113,7 @@ public class Preferences {
 
 		userInput.close();
 
-		return new Preferences(rootFolder, url, user, password, groups);
+		return new Preferences(configFolder, nasFolder, url, user, password, groups);
 	}
 
 	private static boolean scanBool(final Scanner userInput) {
@@ -141,12 +146,13 @@ public class Preferences {
 	 * @param dir le répertoire racine des photos du NAS
 	 */
 	public void toFile() {
-		final File prefFile = new File(rootPath + "/" + PREF_FILE_NAME);
+		final File prefFile = new File(configPath + "/" + CONFIG_FILENAME);
 
 		try (OutputStream output = new FileOutputStream(prefFile)) {
 
 			final Properties prop = new Properties();
 
+			prop.setProperty("folder", nasFolder);
 			prop.setProperty("url", url);
 			prop.setProperty("user", user);
 			prop.setProperty("password", CryptoUtils.encrypt(password));
@@ -159,15 +165,17 @@ public class Preferences {
 
 			// save properties to project root folder
 			prop.store(output, null);
-
-			Files.setAttribute(prefFile.toPath(), "dos:hidden", Boolean.TRUE, LinkOption.NOFOLLOW_LINKS);
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire les préférences", e);
 		}
 	}
 
-	public String getRootPath() {
-		return rootPath;
+	public String getConfigPath() {
+		return configPath;
+	}
+
+	public String getNasFolder() {
+		return nasFolder;
 	}
 
 	public String getUrl() {

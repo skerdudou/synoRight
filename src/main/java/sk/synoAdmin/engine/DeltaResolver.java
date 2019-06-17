@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class DeltaResolver {
@@ -18,6 +19,28 @@ public class DeltaResolver {
 
 		public List<Folder> getToRemove() {
 			return toRemove;
+		}
+
+		public void printAndProcessAdd(final Consumer<Folder> action) {
+			doPrintAndProcess(toAdd, "Ajout des droits pour les répertoires :", action);
+		}
+
+		public void printAndProcessRemove(final Consumer<Folder> action) {
+			doPrintAndProcess(toRemove, "Suppression des droits pour les répertoires :", action);
+		}
+
+		private void doPrintAndProcess(final List<Folder> list, final String message, final Consumer<Folder> action) {
+			if (list.size() > 0) {
+				System.out.println("\t" + message);
+
+				for (final Folder folder : list) {
+					System.out.println("\t\t" + folder.getName());
+
+					if (action != null) {
+						action.accept(folder);
+					}
+				}
+			}
 		}
 	}
 

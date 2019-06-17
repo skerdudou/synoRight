@@ -22,7 +22,7 @@ public final class CliParams {
 	private boolean usageHelpRequested;
 
 	public enum Actions {
-		INIT, ADD_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB
+		INIT, ADD_GRP, TOGGLE_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB
 	}
 
 	public String getConfigFolder() {

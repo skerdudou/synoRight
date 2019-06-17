@@ -120,22 +120,8 @@ public class RightEngine {
 
 			System.out.println("Groupe '" + group.getName() + "' :");
 
-			if (grpDelta.getToAdd().size() > 0) {
-				System.out.println("\tAjout du fichier pour les répertoires :");
-
-				for (final Folder folder : grpDelta.getToAdd()) {
-					System.out.println("\t\t" + folder.getName());
-					doCreateRightFile(group, folder);
-				}
-			}
-
-			if (grpDelta.getToRemove().size() > 0) {
-				System.out.println("\tSuppression du fichier pour les répertoires :");
-				for (final Folder folder : grpDelta.getToRemove()) {
-					System.out.println("\t\t" + folder.getName());
-					doRemoveRightFile(group, folder);
-				}
-			}
+			grpDelta.printAndProcessAdd(f -> doCreateRightFile(group, f));
+			grpDelta.printAndProcessRemove(f -> doRemoveRightFile(group, f));
 
 		}
 
@@ -169,20 +155,8 @@ public class RightEngine {
 
 			System.out.println("Groupe '" + group.getName() + "' :");
 
-			if (grpDelta.getToAdd().size() > 0) {
-				System.out.println("\tAjout des droits pour les répertoires :");
-
-				for (final Folder folder : grpDelta.getToAdd()) {
-					System.out.println("\t\t" + folder.getName());
-				}
-			}
-
-			if (grpDelta.getToRemove().size() > 0) {
-				System.out.println("\tSuppression des droits pour les répertoires :");
-				for (final Folder folder : grpDelta.getToRemove()) {
-					System.out.println("\t\t" + folder.getName());
-				}
-			}
+			grpDelta.printAndProcessAdd(null);
+			grpDelta.printAndProcessRemove(null);
 
 			synoClient.setAccessRight(group.getId(), grpDelta.getToAdd(), grpDelta.getToRemove());
 		}

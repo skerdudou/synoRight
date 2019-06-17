@@ -39,6 +39,7 @@ public class Main {
 					break;
 				case ADD_GRP:
 				case DEL_GRP:
+				case TOGGLE_GRP:
 					break;
 				default:
 					throw new RuntimeException("Action non prise en charge");

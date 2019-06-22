@@ -1,5 +1,7 @@
 package sk.synoAdmin.synology;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -78,18 +80,35 @@ public class SynoApiClient {
 		return synoResponse;
 	}
 
-	public SynoSetAccessRightResponse setAccessRight(final String gid, final List<Folder> groupsToAdd, final List<Folder> groupsToDelete) {
+	public SynoSetAccessRightResponse setAccessRight(final String gid, final List<Folder> foldersToAddList, final List<Folder> foldersToDeleteList) {
+
+		final String foldersToDelete = foldersToDeleteList.stream()
+				.map(Folder::getId)
+				.collect(Collectors.joining(","));
+
+		final String foldersToAdd = foldersToAddList.stream()
+				.map(Folder::getId)
+				.collect(Collectors.joining(","));
+
+		return setAccessRight(gid, foldersToAdd, foldersToDelete);
+	}
+
+	public SynoSetAccessRightResponse addAccessRight(final String gid, final Folder... foldersToAdd) {
+		return setAccessRight(gid, Arrays.asList(foldersToAdd), new ArrayList<>(0));
+	}
+
+	public SynoSetAccessRightResponse removeAccessRight(final String gid, final Folder... folderToDelete) {
+		return setAccessRight(gid, new ArrayList<>(0), Arrays.asList(folderToDelete));
+	}
+
+	private SynoSetAccessRightResponse setAccessRight(final String gid, final String foldersToAdd, final String foldersToDelete) {
 		final Form form = new Form();
 		form.param("api", "SYNO.PhotoStation.Permission");
 		form.param("version", "1");
 		form.param("method", "editgroup");
 		form.param("id", gid);
-		form.param("album_browse_delete", groupsToDelete.stream()
-				.map(Folder::getId)
-				.collect(Collectors.joining(",")));
-		form.param("album_browse_add", groupsToAdd.stream()
-				.map(Folder::getId)
-				.collect(Collectors.joining(",")));
+		form.param("album_browse_delete", foldersToDelete);
+		form.param("album_browse_add", foldersToAdd);
 //		form.param("album_upload_delete", "");
 //		form.param("album_upload_add", "");
 //		form.param("album_manage_delete", "");

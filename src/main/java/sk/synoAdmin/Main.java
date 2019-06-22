@@ -23,10 +23,22 @@ public class Main {
 		if (Actions.INIT.equals(cliParams.getAction())) {
 			createPrefs();
 		} else {
+			if (Actions.ADD_GRP.equals(cliParams.getAction()) || Actions.DEL_GRP.equals(cliParams.getAction())) {
+				if (cliParams.getGid() == null) {
+					throw new UserException("Le paramètre de group est obligatoire");
+				}
+				if (cliParams.getTargetFolder() == null) {
+					throw new UserException("Le paramètre de répertoire est obligatoire");
+				}
+			}
+
 			final Preferences pref = readPrefs(cliParams);
 
 			final RightEngine re = new RightEngine(pref);
-			re.init();
+			if (Actions.FULL_DB_TO_FS.equals(cliParams.getAction()) ||
+					Actions.FULL_FS_TO_DB.equals(cliParams.getAction())) {
+				re.getFullState();
+			}
 
 			final long startAction = System.nanoTime();
 
@@ -38,8 +50,10 @@ public class Main {
 					re.fsToDb();
 					break;
 				case ADD_GRP:
+					re.addRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName("kerdudou"));
+					break;
 				case DEL_GRP:
-				case TOGGLE_GRP:
+					re.removeRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName("kerdudou"));
 					break;
 				default:
 					throw new RuntimeException("Action non prise en charge");

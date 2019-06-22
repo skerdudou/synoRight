@@ -194,4 +194,11 @@ public class Preferences {
 		return groups;
 	}
 
+	public Group getGroupByName(final String name) {
+		return groups.stream()
+				.filter(g -> g.getName().equalsIgnoreCase(name))
+				.findAny()
+				.orElseThrow(() -> new UserException("Impossible de trouver le groupe " + name));
+	}
+
 }

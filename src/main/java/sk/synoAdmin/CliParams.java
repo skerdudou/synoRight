@@ -1,7 +1,5 @@
 package sk.synoAdmin;
 
-import java.io.File;
-
 import picocli.CommandLine.Option;
 
 public final class CliParams {
@@ -10,7 +8,7 @@ public final class CliParams {
 	private String configFolder;
 
 	@Option(names = { "-d", "--directory" }, description = "Répertoire à cibler")
-	private File targetFolder;
+	private String targetFolder;
 
 	@Option(names = { "-g", "--group" }, description = "Id du groupe à ajouter ou supprimer")
 	private String gid;
@@ -22,14 +20,14 @@ public final class CliParams {
 	private boolean usageHelpRequested;
 
 	public enum Actions {
-		INIT, ADD_GRP, TOGGLE_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB
+		INIT, ADD_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB
 	}
 
 	public String getConfigFolder() {
 		return configFolder;
 	}
 
-	public File getTargetFolder() {
+	public String getTargetFolder() {
 		return targetFolder;
 	}
 

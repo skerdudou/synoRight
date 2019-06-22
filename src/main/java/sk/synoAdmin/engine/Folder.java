@@ -60,7 +60,7 @@ public class Folder {
 	}
 
 	public boolean matchParentId(final String id) {
-		if (parent == null) {
+		if (parent == null && "1".equals(id)) {
 			return true;
 		}
 

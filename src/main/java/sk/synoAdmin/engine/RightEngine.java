@@ -4,12 +4,15 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 
+import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.DeltaResolver.GrpDelta;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.SynoApiClient;
@@ -27,7 +30,7 @@ public class RightEngine {
 		synoClient = new SynoApiClient(pref);
 	}
 
-	public void init() {
+	public void getFullState() {
 		final long start = System.nanoTime();
 
 		readFs();
@@ -80,18 +83,11 @@ public class RightEngine {
 					continue;
 				}
 
-				final Optional<Folder> folder = foldersToScan.stream()
-						.filter(f -> f.getName().equals(synoFolderRight.getTitle()))
-						.filter(f -> f.matchParentId(synoFolderRight.getParent()))
-						.findAny();
+				final Folder folder = findFolder(foldersToScan, synoFolderRight);
 
-				if (!folder.isPresent()) {
-					throw new RuntimeException("Impossible de matcher les droits de '" + synoFolderRight.getTitle() + "' avec le fileSystem");
-				}
+				updateDbInfos(folder, synoFolderRight, grp);
 
-				foldersToScan.remove(folder.get());
-
-				updateDbInfos(folder.get(), synoFolderRight, grp);
+				foldersToScan.remove(folder);
 			}
 
 			if (foldersToScan.size() > 0) {
@@ -100,6 +96,22 @@ public class RightEngine {
 
 		}
 
+	}
+
+	private Folder findFolder(final List<Folder> foldersToScan, final SynoPermissionResponse synoFolderRight) {
+		final Optional<Folder> folder = findFolderOptional(foldersToScan, synoFolderRight);
+
+		if (!folder.isPresent()) {
+			throw new RuntimeException("Impossible de matcher les droits de '" + synoFolderRight.getTitle() + "' avec le fileSystem");
+		}
+		return folder.get();
+	}
+
+	private Optional<Folder> findFolderOptional(final List<Folder> foldersToScan, final SynoPermissionResponse synoFolderRight) {
+		return foldersToScan.stream()
+				.filter(f -> f.getName().equals(synoFolderRight.getTitle()))
+				.filter(f -> f.matchParentId(synoFolderRight.getParent()))
+				.findAny();
 	}
 
 	private void updateDbInfos(final Folder folder, final SynoPermissionResponse synoRight, final Group grp) {
@@ -139,9 +151,13 @@ public class RightEngine {
 
 	private void doRemoveRightFile(final Group group, final Folder folder) {
 		final File fileToDelete = getRightFile(group, folder);
-		if (!fileToDelete.delete()) {
+		if (fileToDelete.exists() && !fileToDelete.delete()) {
 			System.out.println("Impossible de supprimer le fichier d'affectation des droits " + fileToDelete.getPath());
 		}
+	}
+
+	private File getRightFile(final Group group, final Folder folder) {
+		return new File(folder.getFolderPath() + "/" + group.getFileName());
 	}
 
 	// Mets a jour les droits dans PhotoStation en fonction des fichiers sur le NAS
@@ -162,8 +178,68 @@ public class RightEngine {
 		}
 	}
 
-	private File getRightFile(final Group group, final Folder folder) {
-		return new File(folder.getFolderPath() + "/" + group.getFileName());
+	public void addRightToFolder(final String folder, final Group grp) {
+		final Folder folderToUpdate = getFolderToUpdate(folder, grp);
+		final Folder parentFolder = folderToUpdate.getParent();
+
+		// ajout sur DB
+		if (parentFolder == null) {
+			synoClient.addAccessRight(grp.getId(), folderToUpdate);
+		} else {
+			synoClient.addAccessRight(grp.getId(), folderToUpdate, parentFolder);
+		}
+
+		// ajout sur FS
+		doCreateRightFile(grp, folderToUpdate);
+		if (parentFolder != null) {
+			doCreateRightFile(grp, parentFolder);
+		}
+
 	}
 
+	public void removeRightToFolder(final String folder, final Group grp) {
+		final Folder folderToUpdate = getFolderToUpdate(folder, grp);
+
+		// ajout sur DB
+		synoClient.removeAccessRight(grp.getId(), folderToUpdate);
+
+		// ajout sur FS
+		doRemoveRightFile(grp, folderToUpdate);
+	}
+
+	private Folder getFolderToUpdate(final String folder, final Group grp) {
+		final Path folderPath = Paths.get(folder);
+		final Path nasPath = Paths.get(pref.getNasFolder());
+
+		if (!Files.isDirectory(folderPath)) {
+			throw new UserException("Le répertoire '" + folder + "' n'existe pas.");
+		}
+
+		if (folderPath.equals(nasPath) || !folderPath.startsWith(nasPath)) {
+			throw new UserException("Répertoire non pris en charge, il doit être contenu dans '" + pref.getNasFolder() + "'");
+		}
+
+		final Path relativePath = nasPath.relativize(folderPath);
+
+		// résolution arbo des droits FS
+		Folder parent = null;
+		for (final Path curentPath : relativePath) {
+			final File absoluteFilePath = parent == null ? nasPath.resolve(curentPath).toFile() : Paths.get(parent.getFolderPath()).resolve(curentPath).toFile();
+			final Folder newFolder = new Folder(absoluteFilePath, parent);
+			updateFsRight(newFolder);
+			folders.add(newFolder);
+
+			parent = newFolder;
+		}
+
+		// résolution ID de la DB
+		for (final SynoPermissionResponse synoFolderRight : synoClient.getAccessRight(grp.getId()).getAll()) {
+			final Optional<Folder> correspFolder = findFolderOptional(folders, synoFolderRight);
+			if (correspFolder.isPresent()) {
+				updateDbInfos(correspFolder.get(), synoFolderRight, grp);
+			}
+		}
+
+		return parent;
+	}
 }

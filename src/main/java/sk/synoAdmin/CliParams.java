@@ -10,8 +10,8 @@ public final class CliParams {
 	@Option(names = { "-d", "--directory" }, description = "Répertoire à cibler")
 	private String targetFolder;
 
-	@Option(names = { "-g", "--group" }, description = "Id du groupe à ajouter ou supprimer")
-	private String gid;
+	@Option(names = { "-g", "--group" }, description = "Nom du groupe à ajouter ou supprimer")
+	private String groupName;
 
 	@Option(names = { "-a", "--action" }, required = true, description = "Actions, parmis : ${COMPLETION-CANDIDATES}")
 	private Actions action;
@@ -31,8 +31,8 @@ public final class CliParams {
 		return targetFolder;
 	}
 
-	public String getGid() {
-		return gid;
+	public String getGroupName() {
+		return groupName;
 	}
 
 	public Actions getAction() {

@@ -27,7 +27,7 @@ public class Main {
 				createPrefs();
 			} else {
 				if (Actions.ADD_GRP.equals(cliParams.getAction()) || Actions.DEL_GRP.equals(cliParams.getAction())) {
-					if (cliParams.getGid() == null) {
+					if (cliParams.getGroupName() == null) {
 						throw new UserException("Le paramètre de group est obligatoire");
 					}
 					if (cliParams.getTargetFolder() == null) {
@@ -53,10 +53,10 @@ public class Main {
 						re.fsToDb();
 						break;
 					case ADD_GRP:
-						re.addRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName("kerdudou"));
+						re.addRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName(cliParams.getGroupName()));
 						break;
 					case DEL_GRP:
-						re.removeRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName("kerdudou"));
+						re.removeRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName(cliParams.getGroupName()));
 						break;
 					default:
 						throw new RuntimeException("Action non prise en charge");

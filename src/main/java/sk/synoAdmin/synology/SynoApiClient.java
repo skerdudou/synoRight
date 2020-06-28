@@ -3,6 +3,7 @@ package sk.synoAdmin.synology;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import javax.ws.rs.client.Client;
@@ -14,6 +15,7 @@ import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.Form;
 import javax.ws.rs.core.Response;
 
+import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Folder;
 import sk.synoAdmin.prefs.Preferences;
@@ -31,36 +33,36 @@ public class SynoApiClient {
 		this.pref = pref;
 		final Client client = ClientBuilder.newClient();
 		webTarget = client.target(pref.getUrl());
-
-		login();
 	}
 
-	private void login() {
-		final long start = System.nanoTime();
+	public CompletableFuture<Void> loginAsynch() {
+		return CompletableFuture.runAsync(this::login);
+	}
 
-		final Form form = new Form();
-		form.param("api", "SYNO.PhotoStation.Auth");
-		form.param("method", "photo_login");
-		form.param("version", "1");
-		form.param("username", pref.getUser());
-		form.param("passwd", pref.getPassword());
-//		form.param("enable_syno_token", "true");
+	public void login() {
+		LogUtil.runMonitored(() -> {
+			final Form form = new Form();
+			form.param("api", "SYNO.PhotoStation.Auth");
+			form.param("method", "photo_login");
+			form.param("version", "1");
+			form.param("username", pref.getUser());
+			form.param("passwd", pref.getPassword());
+//			form.param("enable_syno_token", "true");
 
-		final Response response = doRequest("webapi/auth.php", form);
-		final SynoLoginResponse synoLoginResponse = response.readEntity(SynoLoginResponse.class);
+			final Response response = doRequest("webapi/auth.php", form);
+			final SynoLoginResponse synoLoginResponse = response.readEntity(SynoLoginResponse.class);
 
-		if (synoLoginResponse == null || !synoLoginResponse.isSuccess()) {
-			throw new UserException("Login : fail");
-		}
+			if (synoLoginResponse == null || !synoLoginResponse.isSuccess()) {
+				throw new UserException("Login : fail");
+			}
 
-		if (!synoLoginResponse.isAdmin()) {
-			throw new UserException("Login : utilisteur non admin");
-		}
+			if (!synoLoginResponse.isAdmin()) {
+				throw new UserException("Login : utilisteur non admin");
+			}
 
-		cookieSession = response.getCookies().get("PHPSESSID");
+			cookieSession = response.getCookies().get("PHPSESSID");
 
-		final long end = System.nanoTime();
-		System.out.println("Login ok : " + (end - start) / 1000000);
+		}, "Login time");
 	}
 
 	public SynoAccessRightResponse getAccessRight(final String gid) {

@@ -11,7 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
+import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.DeltaResolver.GrpDelta;
 import sk.synoAdmin.prefs.Preferences;
@@ -31,17 +34,21 @@ public class RightEngine {
 	}
 
 	public void getFullState() {
-		final long start = System.nanoTime();
+		// Lauch login to Syno asynch
+		final CompletableFuture<Void> futureLogin = synoClient.loginAsynch();
 
-		readFs();
+		// access FS infos
+		LogUtil.runMonitored(this::readFs, "Fs time");
 
-		final long endFs = System.nanoTime();
-		System.out.println("Fs time : " + (endFs - start) / 1000000);
+		// wait for login
+		try {
+			futureLogin.get();
+		} catch (InterruptedException | ExecutionException e) {
+			throw new RuntimeException(e);
+		}
 
-		readDb();
-
-		final long endDb = System.nanoTime();
-		System.out.println("Db time : " + (endDb - endFs) / 1000000);
+		// access DB infos
+		LogUtil.runMonitored(this::readDb, "Db time");
 	}
 
 	private void readFs() {
@@ -119,6 +126,10 @@ public class RightEngine {
 		if (synoRight.isBrowse()) {
 			folder.addDbGroup(grp);
 		}
+	}
+
+	public void login() {
+		synoClient.login();
 	}
 
 	// créé les fichiers sur le NAS en fonction des droits de PhotoStation

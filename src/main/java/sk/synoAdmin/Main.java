@@ -12,39 +12,53 @@ public class Main {
 
 	public static void main(final String[] args) throws InterruptedException {
 		try {
-			final long start = System.nanoTime();
-			final CliParams cliParams = CommandLine.populateCommand(new CliParams(), args);
+			LogUtil.runMonitored(() -> {
+				doMain(args);
+			}, "Total time");
+		} catch (final Exception e) {
+			e.printStackTrace();
+			TimeUnit.SECONDS.sleep(25);
+		} finally {
+			TimeUnit.SECONDS.sleep(5);
+		}
+	}
 
-			if (cliParams.isUsageHelpRequested()) {
-				CommandLine.usage(cliParams, System.out);
-				return;
+	private static void doMain(final String[] args) {
+		final CliParams cliParams = LogUtil.getMonitored(
+				() -> CommandLine.populateCommand(new CliParams(), args),
+				"Init time");
+
+		if (cliParams.isUsageHelpRequested()) {
+			CommandLine.usage(cliParams, System.out);
+			System.exit(0);
+		}
+
+		if (Actions.INIT.equals(cliParams.getAction())) {
+			createPrefs();
+		} else {
+			if (Actions.ADD_GRP.equals(cliParams.getAction()) || Actions.DEL_GRP.equals(cliParams.getAction())) {
+				if (cliParams.getGroupName() == null) {
+					throw new UserException("Le paramètre de group est obligatoire");
+				}
+				if (cliParams.getTargetFolder() == null) {
+					throw new UserException("Le paramètre de répertoire est obligatoire");
+				}
 			}
 
-			final long endInit = System.nanoTime();
-			System.out.println("Init time : " + (endInit - start) / 1000000);
+			final Preferences pref = LogUtil.getMonitored(
+					() -> Preferences.fromFile(cliParams.getConfigFolder()),
+					"Prefs time");
 
-			if (Actions.INIT.equals(cliParams.getAction())) {
-				createPrefs();
+			final RightEngine re = new RightEngine(pref);
+
+			if (Actions.FULL_DB_TO_FS.equals(cliParams.getAction()) ||
+					Actions.FULL_FS_TO_DB.equals(cliParams.getAction())) {
+				re.getFullState();
 			} else {
-				if (Actions.ADD_GRP.equals(cliParams.getAction()) || Actions.DEL_GRP.equals(cliParams.getAction())) {
-					if (cliParams.getGroupName() == null) {
-						throw new UserException("Le paramètre de group est obligatoire");
-					}
-					if (cliParams.getTargetFolder() == null) {
-						throw new UserException("Le paramètre de répertoire est obligatoire");
-					}
-				}
+				re.login();
+			}
 
-				final Preferences pref = readPrefs(cliParams);
-
-				final RightEngine re = new RightEngine(pref);
-				if (Actions.FULL_DB_TO_FS.equals(cliParams.getAction()) ||
-						Actions.FULL_FS_TO_DB.equals(cliParams.getAction())) {
-					re.getFullState();
-				}
-
-				final long startAction = System.nanoTime();
-
+			LogUtil.runMonitored(() -> {
 				switch (cliParams.getAction()) {
 					case FULL_DB_TO_FS:
 						re.dbToFs();
@@ -62,17 +76,7 @@ public class Main {
 						throw new RuntimeException("Action non prise en charge");
 				}
 
-				final long endAction = System.nanoTime();
-				System.out.println("Action time : " + (endAction - startAction) / 1000000);
-			}
-
-			final long end = System.nanoTime();
-			System.out.println("End (total : " + (end - start) / 1000000 + ")");
-		} catch (final Exception e) {
-			e.printStackTrace();
-			TimeUnit.SECONDS.sleep(25);
-		} finally {
-			TimeUnit.SECONDS.sleep(5);
+			}, "Action time");
 		}
 	}
 
@@ -83,17 +87,6 @@ public class Main {
 		// TODO : check groups
 
 		pref.toFile();
-	}
-
-	private static Preferences readPrefs(final CliParams cliParams) {
-		final long start = System.nanoTime();
-
-		final Preferences prefs = Preferences.fromFile(cliParams.getConfigFolder());
-
-		final long end = System.nanoTime();
-		System.out.println("Prefs time : " + (end - start) / 1000000);
-
-		return prefs;
 	}
 
 }

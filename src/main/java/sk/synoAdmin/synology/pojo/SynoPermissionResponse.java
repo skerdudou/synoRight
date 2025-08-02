@@ -2,67 +2,43 @@ package sk.synoAdmin.synology.pojo;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SynoPermissionResponse {
 
-	@JsonProperty("_id")
-	private String id;
+	private Integer id;
+	private String name;
 
-	@JsonProperty("_parent")
-	private String parent;
+	@JsonProperty("parent")
+	private Integer parentId;
+	private List<Integer> browseGrpIds;
 
-	private String title;
-	private boolean browse;
-	private boolean manage;
-	private boolean upload;
+	@JsonProperty("additional")
+	private void unpackData(final JsonNode additional) {
+		browseGrpIds = new ArrayList<>();
+		for (var permission : additional.get("sharing_info").get("permission")) {
+			browseGrpIds.add(permission.get("id").asInt());
+		}
+	}
 
-	public String getId() {
+	public Integer getId() {
 		return id;
 	}
 
-	public void setId(final String id) {
-		this.id = id;
+	public String getName() {
+		return name;
 	}
 
-	public String getParent() {
-		return parent;
+	public Integer getParentId() {
+		return parentId;
 	}
 
-	public void setParent(final String parent) {
-		this.parent = parent;
+	public List<Integer> getBrowseGrpIds() {
+		return browseGrpIds;
 	}
-
-	public String getTitle() {
-		return title;
-	}
-
-	public void setTitle(final String title) {
-		this.title = title;
-	}
-
-	public boolean isBrowse() {
-		return browse;
-	}
-
-	public void setBrowse(final boolean browse) {
-		this.browse = browse;
-	}
-
-	public boolean isManage() {
-		return manage;
-	}
-
-	public void setManage(final boolean manage) {
-		this.manage = manage;
-	}
-
-	public boolean isUpload() {
-		return upload;
-	}
-
-	public void setUpload(final boolean upload) {
-		this.upload = upload;
-	}
-
 }

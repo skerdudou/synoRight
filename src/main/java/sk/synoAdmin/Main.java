@@ -35,13 +35,21 @@ public class Main {
 
 		if (Actions.INIT.equals(cliParams.getAction())) {
 			createPrefs();
+		} else if (Actions.TEST_CONNEXION.equals(cliParams.getAction())) {
+			final Preferences pref = LogUtil.getMonitored(
+					() -> Preferences.fromFile(cliParams.getConfigFolder()),
+					"Prefs time");
+
+			final RightEngine re = new RightEngine(pref);
+
+			re.getFullState();
 		} else {
 			if (Actions.ADD_GRP.equals(cliParams.getAction()) || Actions.DEL_GRP.equals(cliParams.getAction())) {
 				if (cliParams.getGroupName() == null) {
-					throw new UserException("Le paramètre de group est obligatoire");
+					throw new UserException("Le paramÃ¨tre de group est obligatoire");
 				}
 				if (cliParams.getTargetFolder() == null) {
-					throw new UserException("Le paramètre de répertoire est obligatoire");
+					throw new UserException("Le paramÃ¨tre de rÃ©pertoire est obligatoire");
 				}
 			}
 
@@ -83,7 +91,7 @@ public class Main {
 	private static void createPrefs() {
 		final Preferences pref = Preferences.fromPrompt("./");
 
-		new SynoApiClient(pref); // test d'accès à l'API
+		new SynoApiClient(pref); // test d'accÃ¨s Ã  l'API
 		// TODO : check groups
 
 		pref.toFile();

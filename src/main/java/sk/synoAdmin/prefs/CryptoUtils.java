@@ -11,10 +11,10 @@ public class CryptoUtils {
 	private static final String SECRET_KEY = "uc97SeC3eR5G159F";
 
 	/**
-	 * Encrypte en blowfish.
+	 * Chiffre en blowfish.
 	 *
-	 * @param password le mdp a crypter
-	 * @return le mdp crypté et en base 64.
+	 * @param password le mdp a chiffrer
+	 * @return le mdp chiffrÃ© et en base 64.
 	 */
 	public static String encrypt(final String password) {
 		try {
@@ -28,12 +28,13 @@ public class CryptoUtils {
 	}
 
 	/**
-	 * Décrypte.
-	 * 
-	 * @param password le mdp encrypté
+	 * DÃ©chiffre.
+	 *
+	 * @param password le mdp chiffrÃ©
 	 * @return le mdp en clair
 	 */
 	public static String decrypt(final String password) {
+		if (password == null) return null;
 		try {
 			final Key clef = new SecretKeySpec(SECRET_KEY.getBytes("ISO-8859-2"), "Blowfish");
 			final Cipher cipher = Cipher.getInstance("Blowfish");

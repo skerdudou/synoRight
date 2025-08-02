@@ -81,50 +81,40 @@ public class RightEngine {
 	}
 
 	private void readDb() {
-		for (final Group grp : pref.getGroups()) {
-			final List<Folder> foldersToScan = new ArrayList<>(folders);
+		final List<Folder> foldersToScan = new ArrayList<>(folders);
 
-			for (final SynoPermissionResponse synoFolderRight : synoClient.getAccessRight(grp.getId()).getAll()) {
-				if (synoFolderRight.getParent() == null) {
-					// on exclue le premier niveau "Albums"
-					continue;
-				}
+		for (final SynoPermissionResponse synoFolderRight : synoClient.getAccessRight()) {
+			final Folder folder = findFolder(foldersToScan, synoFolderRight);
+			updateDbInfos(folder, synoFolderRight);
 
-				final Folder folder = findFolder(foldersToScan, synoFolderRight);
-
-				updateDbInfos(folder, synoFolderRight, grp);
-
-				foldersToScan.remove(folder);
-			}
-
-			if (foldersToScan.size() > 0) {
-				throw new RuntimeException("Certains éléments ne sont pas encore indexés");
-			}
-
+			foldersToScan.remove(folder);
 		}
 
+		if (foldersToScan.size() > 0) {
+			throw new RuntimeException("Certains Ã©lÃ©ments ne sont pas encore indexÃ©s");
+		}
 	}
 
 	private Folder findFolder(final List<Folder> foldersToScan, final SynoPermissionResponse synoFolderRight) {
 		final Optional<Folder> folder = findFolderOptional(foldersToScan, synoFolderRight);
 
 		if (!folder.isPresent()) {
-			throw new RuntimeException("Impossible de matcher les droits de '" + synoFolderRight.getTitle() + "' avec le fileSystem");
+			throw new RuntimeException("Impossible de matcher les droits de '" + synoFolderRight.getName() + "' avec le fileSystem");
 		}
 		return folder.get();
 	}
 
 	private Optional<Folder> findFolderOptional(final List<Folder> foldersToScan, final SynoPermissionResponse synoFolderRight) {
 		return foldersToScan.stream()
-				.filter(f -> f.getName().equals(synoFolderRight.getTitle()))
-				.filter(f -> f.matchParentId(synoFolderRight.getParent()))
+				.filter(f -> f.getName().equals(synoFolderRight.getName()))
 				.findAny();
 	}
 
-	private void updateDbInfos(final Folder folder, final SynoPermissionResponse synoRight, final Group grp) {
+	private void updateDbInfos(final Folder folder, final SynoPermissionResponse synoRight) {
 		folder.setId(synoRight.getId());
-		if (synoRight.isBrowse()) {
-			folder.addDbGroup(grp);
+		for (var grpId : synoRight.getBrowseGrpIds()) {
+			pref.getGroupById(grpId.toString())
+					.ifPresent(folder::addDbGroup);
 		}
 	}
 
@@ -132,9 +122,9 @@ public class RightEngine {
 		synoClient.login();
 	}
 
-	// créé les fichiers sur le NAS en fonction des droits de PhotoStation
+	// crÃ©Ã© les fichiers sur le NAS en fonction des droits de PhotoStation
 	public void dbToFs() {
-		System.out.println("Mise à jour des fichiers de droits sur le filesystem.");
+		System.out.println("Mise Ã  jour des fichiers de droits sur le filesystem.");
 
 		final Map<Group, GrpDelta> grpDeltas = DeltaResolver.resolveDeltasDbToFs(folders);
 		for (final Entry<Group, GrpDelta> grpDeltaEntry : grpDeltas.entrySet()) {
@@ -145,7 +135,6 @@ public class RightEngine {
 
 			grpDelta.printAndProcessAdd(f -> doCreateRightFile(group, f));
 			grpDelta.printAndProcessRemove(f -> doRemoveRightFile(group, f));
-
 		}
 
 	}
@@ -156,7 +145,7 @@ public class RightEngine {
 			fileToAdd.createNewFile();
 			Files.setAttribute(fileToAdd.toPath(), "dos:hidden", Boolean.TRUE, LinkOption.NOFOLLOW_LINKS);
 		} catch (final IOException e) {
-			System.out.println("Impossible de créer le fichier d'affectation des droits " + fileToAdd.getPath());
+			System.out.println("Impossible de crÃ©er le fichier d'affectation des droits " + fileToAdd.getPath());
 		}
 	}
 
@@ -173,7 +162,7 @@ public class RightEngine {
 
 	// Mets a jour les droits dans PhotoStation en fonction des fichiers sur le NAS
 	public void fsToDb() {
-		System.out.println("Mise à jour des droits dans PhotoStation.");
+		System.out.println("Mise Ã  jour des droits dans PhotoStation.");
 
 		final Map<Group, GrpDelta> grpDeltas = DeltaResolver.resolveDeltasFsToDb(folders);
 		for (final Entry<Group, GrpDelta> grpDeltaEntry : grpDeltas.entrySet()) {
@@ -185,6 +174,7 @@ public class RightEngine {
 			grpDelta.printAndProcessAdd(null);
 			grpDelta.printAndProcessRemove(null);
 
+			// add download role (or remove)
 			synoClient.setAccessRight(group.getId(), grpDelta.getToAdd(), grpDelta.getToRemove());
 		}
 	}
@@ -223,34 +213,41 @@ public class RightEngine {
 		final Path nasPath = Paths.get(pref.getNasFolder());
 
 		if (!Files.isDirectory(folderPath)) {
-			throw new UserException("Le répertoire '" + folder + "' n'existe pas.");
+			throw new UserException("Le rÃ©pertoire '" + folder + "' n'existe pas.");
 		}
 
 		if (folderPath.equals(nasPath) || !folderPath.startsWith(nasPath)) {
-			throw new UserException("Répertoire non pris en charge, il doit être contenu dans '" + pref.getNasFolder() + "'");
+			throw new UserException("RÃ©pertoire non pris en charge, il doit Ãªtre contenu dans '" + pref.getNasFolder() + "'");
 		}
 
 		final Path relativePath = nasPath.relativize(folderPath);
 
-		// résolution arbo des droits FS
+		// rÃ©solution arbo des droits FS et DB en mÃªme temps que l'on avance dans l'arborescence Synology
 		Folder parent = null;
+		Integer parentId = null; // id Synology du dossier parent (null pour la racine)
 		for (final Path curentPath : relativePath) {
 			final File absoluteFilePath = parent == null ? nasPath.resolve(curentPath).toFile() : Paths.get(parent.getFolderPath()).resolve(curentPath).toFile();
 			final Folder newFolder = new Folder(absoluteFilePath, parent);
 			updateFsRight(newFolder);
 			folders.add(newFolder);
-
-			parent = newFolder;
-		}
-
-		// résolution ID de la DB
-		for (final SynoPermissionResponse synoFolderRight : synoClient.getAccessRight(grp.getId()).getAll()) {
-			final Optional<Folder> correspFolder = findFolderOptional(folders, synoFolderRight);
-			if (correspFolder.isPresent()) {
-				updateDbInfos(correspFolder.get(), synoFolderRight, grp);
+			// RÃ©cupÃ©ration des droits Synology Ã  ce niveau
+			var resp = synoClient.getSynoAccessRightResponse(parentId);
+			boolean found = false;
+			for (var perm : resp.getPermissions()) {
+				if (perm.getName().equals(newFolder.getName())) {
+					updateDbInfos(newFolder, perm);
+					parentId = perm.getId();
+					found = true;
+					break;
+				}
 			}
+			if (!found) {
+				throw new RuntimeException("Impossible de trouver le dossier '" + newFolder.getName() + "' dans l'arborescence Synology");
+			}
+			parent = newFolder;
 		}
 
 		return parent;
 	}
+
 }

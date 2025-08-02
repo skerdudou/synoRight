@@ -22,11 +22,11 @@ public class DeltaResolver {
 		}
 
 		public void printAndProcessAdd(final Consumer<Folder> action) {
-			doPrintAndProcess(toAdd, "Ajout des droits pour les répertoires :", action);
+			doPrintAndProcess(toAdd, "Ajout des droits pour les rÃ©pertoires :", action);
 		}
 
 		public void printAndProcessRemove(final Consumer<Folder> action) {
-			doPrintAndProcess(toRemove, "Suppression des droits pour les répertoires :", action);
+			doPrintAndProcess(toRemove, "Suppression des droits pour les rÃ©pertoires :", action);
 		}
 
 		private void doPrintAndProcess(final List<Folder> list, final String message, final Consumer<Folder> action) {
@@ -56,7 +56,7 @@ public class DeltaResolver {
 		final Map<Group, GrpDelta> retour = new HashMap<>();
 
 		for (final Folder folder : folders) {
-			// récupère les listes de groupes du dossier en fonction du contexte (db->fs ou
+			// rÃ©cupÃ¨re les listes de groupes du dossier en fonction du contexte (db->fs ou
 			// fs->db)
 			final List<Group> actualGroups = actualGroupsAccessor.apply(folder);
 			final List<Group> targetGroups = targetGroupsAccessor.apply(folder);
@@ -86,8 +86,8 @@ public class DeltaResolver {
 		}
 	}
 
-	// ajoute le folder dans le bon attribut du delta de la map (créé ce qu'il faut
-	// si nécessiare)
+	// ajoute le folder dans le bon attribut du delta de la map (crÃ©Ã© ce qu'il faut
+	// si nÃ©cessiare)
 	private static void doAddToDeltaMap(final Map<Group, GrpDelta> map, final Folder folder, final Group grp, final Function<GrpDelta, List<Folder>> deltaGrpAccessor) {
 		final GrpDelta delta;
 		if (map.containsKey(grp)) {

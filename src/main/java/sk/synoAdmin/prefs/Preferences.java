@@ -1,16 +1,7 @@
 package sk.synoAdmin.prefs;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Properties;
-import java.util.Scanner;
+import java.io.*;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import sk.synoAdmin.UserException;
@@ -27,20 +18,26 @@ public class Preferences {
 	private final String user;
 	private final String password;
 	private final List<Group> groups;
+	private String cookieSession;
+	private String synoToken;
+	private String cookieDid; // device id for OTP
 
-	private Preferences(final String configPath, final String nasFolder, final String url, final String user, final String password, final List<Group> groups) {
+	private Preferences(final String configPath, final String nasFolder, final String url, final String user, final String password, final List<Group> groups, String cookieSession, String synoToken, String cookieDid) {
 		this.configPath = configPath;
 		this.nasFolder = nasFolder;
 		this.url = url;
 		this.user = user;
 		this.password = password;
 		this.groups = Collections.unmodifiableList(groups);
+		this.cookieSession = cookieSession;
+		this.synoToken = synoToken;
+		this.cookieDid = cookieDid;
 	}
 
 	/**
-	 * Lit les prÈfÈrences dans du fichier.
+	 * Lit les pr√©f√©rences dans du fichier.
 	 *
-	 * @param configPath le rÈpertoire contenant la configuration
+	 * @param configPath le r√©pertoire contenant la configuration
 	 */
 	public static Preferences fromFile(final String configPath) {
 		try (InputStream input = new FileInputStream(configPath + "/" + CONFIG_FILENAME)) {
@@ -53,12 +50,15 @@ public class Preferences {
 			final String user = prop.getProperty("user");
 			final String password = CryptoUtils.decrypt(prop.getProperty("password"));
 			final String groupsString = prop.getProperty("groups");
+			final String cookieSession = prop.getProperty("cookieSession");
+			final String synoToken = prop.getProperty("synoToken");
+			final String cookieDid = prop.getProperty("cookieDid");
 
 			final List<Group> groups = new ArrayList<>();
 			final String[] groupsSplit = groupsString.split(";");
 
 			if (groupsSplit.length == 0) {
-				throw new UserException("Aucun groupe de configurÈ !");
+				throw new UserException("Aucun groupe de configur√© !");
 			}
 
 			for (final String groupString : groupsSplit) {
@@ -70,15 +70,14 @@ public class Preferences {
 				groups.add(new Group(groupSplit[0], groupSplit[1]));
 			}
 
-			return new Preferences(configPath, folder, url, user, password, groups);
-
+			return new Preferences(configPath, folder, url, user, password, groups, cookieSession, synoToken, cookieDid);
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible de lire les prÈfÈrences", e);
+			throw new RuntimeException("Impossible de lire les pr√©f√©rences", e);
 		}
 	}
 
 	/**
-	 * Construit un objet prÈfÈrence ‡ partir d'entrÈe utilisateur.
+	 * Construit un objet pr√©f√©rence √† partir d'entr√©e utilisateur.
 	 */
 	public static Preferences fromPrompt(final String configFolder) {
 		final Scanner userInput = new Scanner(System.in);
@@ -86,7 +85,7 @@ public class Preferences {
 		System.out.println("URL des photos sur le NAS :");
 		final String nasFolder = userInput.next();
 
-		System.out.println("URL d'accËs ‡ PhotoStation :");
+		System.out.println("URL d'acc√®s √† PhotoStation :");
 		final String url = userInput.next();
 
 		System.out.println("User :");
@@ -113,7 +112,7 @@ public class Preferences {
 
 		userInput.close();
 
-		return new Preferences(configFolder, nasFolder, url, user, password, groups);
+		return new Preferences(configFolder, nasFolder, url, user, password, groups, null, null, null);
 	}
 
 	private static boolean scanBool(final Scanner userInput) {
@@ -133,7 +132,7 @@ public class Preferences {
 
 			incorrect = !isYes && !isNo;
 			if (incorrect) {
-				System.out.println("RÈpondre par oui ou non");
+				System.out.println("R√©pondre par oui ou non");
 			}
 		} while (incorrect);
 
@@ -141,9 +140,7 @@ public class Preferences {
 	}
 
 	/**
-	 * Ecrit les prÈfÈrences dans le fichier.
-	 *
-	 * @param dir le rÈpertoire racine des photos du NAS
+	 * Ecrit les pr√©f√©rences dans le fichier.
 	 */
 	public void toFile() {
 		final File prefFile = new File(configPath + "/" + CONFIG_FILENAME);
@@ -166,7 +163,7 @@ public class Preferences {
 			// save properties to project root folder
 			prop.store(output, null);
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible d'Ècrire les prÈfÈrences", e);
+			throw new RuntimeException("Impossible d'√©crire les pr√©f√©rences", e);
 		}
 	}
 
@@ -201,4 +198,56 @@ public class Preferences {
 				.orElseThrow(() -> new UserException("Impossible de trouver le groupe " + name));
 	}
 
+	public Optional<Group> getGroupById(final String id) {
+		return groups.stream()
+				.filter(g -> g.getId().equals(id))
+				.findAny();
+	}
+
+	public String getCookieSession() {
+		return cookieSession;
+	}
+
+	public void setCookieSession(String cookieSession) {
+		this.cookieSession = cookieSession;
+		setValueToConfigFile("cookieSession", cookieSession);
+	}
+
+	public String getSynoToken() {
+		return synoToken;
+	}
+
+	public void setSynoToken(String synoToken) {
+		this.synoToken = synoToken;
+		setValueToConfigFile("synoToken", synoToken);
+	}
+
+	public String getCookieDid() {
+		return cookieDid;
+	}
+
+	public void setCookieDid(String cookieDid) {
+		this.cookieDid = cookieDid;
+		setValueToConfigFile("cookieDid", cookieDid);
+	}
+
+	private void setValueToConfigFile(String key, String value) {
+		final File prefFile = new File(configPath + "/" + CONFIG_FILENAME);
+
+		final Properties prop;
+		try (InputStream input = new FileInputStream(prefFile)) {
+			prop = new Properties();
+			prop.load(input);
+		} catch (final IOException e) {
+			throw new RuntimeException("Impossible de lire les pr√©f√©rences", e);
+		}
+
+
+		try (OutputStream output = new FileOutputStream(prefFile)) {
+			prop.setProperty(key, value);
+			prop.store(output, null);
+		} catch (final IOException e) {
+			throw new RuntimeException("Impossible d'√©crire les pr√©f√©rences", e);
+		}
+	}
 }

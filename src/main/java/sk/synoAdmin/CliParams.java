@@ -4,23 +4,23 @@ import picocli.CommandLine.Option;
 
 public final class CliParams {
 
-	@Option(names = { "-c", "--config" }, defaultValue = "./", description = "Répertoire contenant la configuration. Par défaut, le répertoire courant.")
+	@Option(names = { "-c", "--config" }, defaultValue = "./", description = "RÃ©pertoire contenant la configuration. Par dÃ©faut, le rÃ©pertoire courant.")
 	private String configFolder;
 
-	@Option(names = { "-d", "--directory" }, description = "Répertoire à cibler")
+	@Option(names = { "-d", "--directory" }, description = "RÃ©pertoire Ã  cibler")
 	private String targetFolder;
 
-	@Option(names = { "-g", "--group" }, description = "Nom du groupe à ajouter ou supprimer")
+	@Option(names = { "-g", "--group" }, description = "Nom du groupe Ã  ajouter ou supprimer")
 	private String groupName;
 
-	@Option(names = { "-a", "--action" }, required = true, description = "Actions, parmis : ${COMPLETION-CANDIDATES}")
+	@Option(names = { "-a", "--action" }, required = true, description = "Actions, parmi : ${COMPLETION-CANDIDATES}")
 	private Actions action;
 
 	@Option(names = { "-h", "--help" }, usageHelp = true, description = "display this help message")
 	private boolean usageHelpRequested;
 
 	public enum Actions {
-		INIT, ADD_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB
+		INIT, ADD_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB, TEST_CONNEXION
 	}
 
 	public String getConfigFolder() {

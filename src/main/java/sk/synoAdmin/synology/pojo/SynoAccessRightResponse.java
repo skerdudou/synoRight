@@ -1,17 +1,28 @@
 package sk.synoAdmin.synology.pojo;
 
-import java.util.List;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.List;
+import java.util.Map;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SynoAccessRightResponse {
 
-	private List<SynoPermissionResponse> all;
+	private boolean success;
 
-	public List<SynoPermissionResponse> getAll() {
-		return all;
+	private List<SynoPermissionResponse> permissions;
+
+	@JsonProperty("data")
+	private void unpackData(final Map<String, List<SynoPermissionResponse>> data) {
+		permissions = data.get("list");
 	}
 
-	public void setAll(final List<SynoPermissionResponse> all) {
-		this.all = all;
+	public boolean isSuccess() {
+		return success;
 	}
 
+	public List<SynoPermissionResponse> getPermissions() {
+		return permissions;
+	}
 }

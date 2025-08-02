@@ -7,11 +7,15 @@ import java.util.List;
 public class Folder {
 	public Folder(final File folder, final Folder parent) {
 		this.folder = folder;
-		name = folder.getName();
+		if (parent != null) {
+			name = parent.getName() + "/" + folder.getName();
+		} else {
+			name = "/" + folder.getName();
+		}
 		this.parent = parent;
 	}
 
-	private String id;
+	private Integer id;
 	private final Folder parent;
 
 	private final File folder;
@@ -20,11 +24,11 @@ public class Folder {
 	private final List<Group> fsGroups = new ArrayList<>();
 	private final List<Group> dbGroups = new ArrayList<>();
 
-	public String getId() {
+	public Integer getId() {
 		return id;
 	}
 
-	public void setId(final String id) {
+	public void setId(final Integer id) {
 		if (this.id != null && !this.id.equals(id)) {
 			throw new RuntimeException("Les ID sont non concordants entre les appels");
 		}
@@ -59,11 +63,4 @@ public class Folder {
 		dbGroups.add(group);
 	}
 
-	public boolean matchParentId(final String id) {
-		if (parent == null && "1".equals(id)) {
-			return true;
-		}
-
-		return id.equals(parent.getId());
-	}
 }

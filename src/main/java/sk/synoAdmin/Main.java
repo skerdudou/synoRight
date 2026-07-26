@@ -3,6 +3,7 @@ package sk.synoAdmin;
 import java.util.concurrent.TimeUnit;
 
 import picocli.CommandLine;
+import picocli.CommandLine.ParameterException;
 import sk.synoAdmin.CliParams.Actions;
 import sk.synoAdmin.engine.RightEngine;
 import sk.synoAdmin.prefs.Preferences;
@@ -15,10 +16,18 @@ public class Main {
 			LogUtil.runMonitored(() -> {
 				doMain(args);
 			}, "Total time");
+		} catch (final ParameterException e) {
+			System.err.println(e.getMessage());
+			e.getCommandLine().usage(System.err);
+			TimeUnit.SECONDS.sleep(25);
+		} catch (final UserException e) {
+			System.err.println(e.getMessage());
+			TimeUnit.SECONDS.sleep(25);
 		} catch (final Exception e) {
 			e.printStackTrace();
 			TimeUnit.SECONDS.sleep(25);
 		} finally {
+			// laisse le temps de lire la console quand on est lancé depuis le menu contextuel
 			TimeUnit.SECONDS.sleep(5);
 		}
 	}
@@ -30,61 +39,55 @@ public class Main {
 
 		if (cliParams.isUsageHelpRequested()) {
 			CommandLine.usage(cliParams, System.out);
-			System.exit(0);
+			return;
 		}
 
-		if (Actions.INIT.equals(cliParams.getAction())) {
+		if (cliParams.getAction() == Actions.INIT) {
 			createPrefs();
-		} else if (Actions.TEST_CONNEXION.equals(cliParams.getAction())) {
-			final Preferences pref = LogUtil.getMonitored(
-					() -> Preferences.fromFile(cliParams.getConfigFolder()),
-					"Prefs time");
+			return;
+		}
 
-			final RightEngine re = new RightEngine(pref);
-
-			re.getFullState();
-		} else {
-			if (Actions.ADD_GRP.equals(cliParams.getAction()) || Actions.DEL_GRP.equals(cliParams.getAction())) {
-				if (cliParams.getGroupName() == null) {
-					throw new UserException("Le paramètre de group est obligatoire");
-				}
-				if (cliParams.getTargetFolder() == null) {
-					throw new UserException("Le paramètre de répertoire est obligatoire");
-				}
+		if (cliParams.getAction() == Actions.ADD_GRP || cliParams.getAction() == Actions.DEL_GRP) {
+			if (cliParams.getGroupName() == null) {
+				throw new UserException("Le paramètre de groupe est obligatoire");
 			}
+			if (cliParams.getTargetFolder() == null) {
+				throw new UserException("Le paramètre de répertoire est obligatoire");
+			}
+		}
 
-			final Preferences pref = LogUtil.getMonitored(
-					() -> Preferences.fromFile(cliParams.getConfigFolder()),
-					"Prefs time");
+		final Preferences pref = LogUtil.getMonitored(
+				() -> Preferences.fromFile(cliParams.getConfigFolder()),
+				"Prefs time");
 
-			final RightEngine re = new RightEngine(pref);
+		final RightEngine re = new RightEngine(pref);
 
-			if (Actions.FULL_DB_TO_FS.equals(cliParams.getAction()) ||
-					Actions.FULL_FS_TO_DB.equals(cliParams.getAction())) {
+		switch (cliParams.getAction()) {
+			case TEST_CONNEXION:
 				re.getFullState();
-			} else {
+				break;
+			case FULL_DB_TO_FS:
+				re.getFullState();
+				LogUtil.runMonitored(re::dbToFs, "Action time");
+				break;
+			case FULL_FS_TO_DB:
+				re.getFullState();
+				LogUtil.runMonitored(re::fsToDb, "Action time");
+				break;
+			case ADD_GRP:
 				re.login();
-			}
-
-			LogUtil.runMonitored(() -> {
-				switch (cliParams.getAction()) {
-					case FULL_DB_TO_FS:
-						re.dbToFs();
-						break;
-					case FULL_FS_TO_DB:
-						re.fsToDb();
-						break;
-					case ADD_GRP:
-						re.addRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName(cliParams.getGroupName()));
-						break;
-					case DEL_GRP:
-						re.removeRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName(cliParams.getGroupName()));
-						break;
-					default:
-						throw new RuntimeException("Action non prise en charge");
-				}
-
-			}, "Action time");
+				LogUtil.runMonitored(
+						() -> re.addRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName(cliParams.getGroupName())),
+						"Action time");
+				break;
+			case DEL_GRP:
+				re.login();
+				LogUtil.runMonitored(
+						() -> re.removeRightToFolder(cliParams.getTargetFolder(), pref.getGroupByName(cliParams.getGroupName())),
+						"Action time");
+				break;
+			default:
+				throw new UserException("Action non prise en charge : " + cliParams.getAction());
 		}
 	}
 

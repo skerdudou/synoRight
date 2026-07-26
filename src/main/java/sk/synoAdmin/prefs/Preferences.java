@@ -1,7 +1,17 @@
 package sk.synoAdmin.prefs;
 
-import java.io.*;
-import java.util.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Scanner;
 import java.util.stream.Collectors;
 
 import sk.synoAdmin.UserException;
@@ -10,7 +20,7 @@ import sk.synoAdmin.engine.Group;
 public class Preferences {
 
 	public static final String PREF_FILE_NAME = ".synoRight";
-	public static final String CONFIG_FILENAME = "/config" + PREF_FILE_NAME + ".properties";
+	public static final String CONFIG_FILENAME = "config" + PREF_FILE_NAME + ".properties";
 
 	private final String configPath;
 	private final String nasFolder;
@@ -22,7 +32,7 @@ public class Preferences {
 	private String synoToken;
 	private String cookieDid; // device id for OTP
 
-	private Preferences(final String configPath, final String nasFolder, final String url, final String user, final String password, final List<Group> groups, String cookieSession, String synoToken, String cookieDid) {
+	private Preferences(final String configPath, final String nasFolder, final String url, final String user, final String password, final List<Group> groups, final String cookieSession, final String synoToken, final String cookieDid) {
 		this.configPath = configPath;
 		this.nasFolder = nasFolder;
 		this.url = url;
@@ -40,34 +50,39 @@ public class Preferences {
 	 * @param configPath le répertoire contenant la configuration
 	 */
 	public static Preferences fromFile(final String configPath) {
-		try (InputStream input = new FileInputStream(configPath + "/" + CONFIG_FILENAME)) {
+		final File configFile = new File(configPath, CONFIG_FILENAME);
+		if (!configFile.isFile()) {
+			throw new UserException("Fichier de configuration introuvable : " + configFile.getPath()
+					+ ". Lancer l'action INIT pour le créer.");
+		}
+
+		try (InputStream input = new FileInputStream(configFile)) {
 
 			final Properties prop = new Properties();
 			prop.load(input);
 
-			final String folder = prop.getProperty("folder");
-			final String url = prop.getProperty("url");
-			final String user = prop.getProperty("user");
+			final String folder = getRequiredProperty(prop, "folder");
+			final String url = getRequiredProperty(prop, "url");
+			final String user = getRequiredProperty(prop, "user");
 			final String password = CryptoUtils.decrypt(prop.getProperty("password"));
-			final String groupsString = prop.getProperty("groups");
+			final String groupsString = getRequiredProperty(prop, "groups");
 			final String cookieSession = prop.getProperty("cookieSession");
 			final String synoToken = prop.getProperty("synoToken");
 			final String cookieDid = prop.getProperty("cookieDid");
 
 			final List<Group> groups = new ArrayList<>();
-			final String[] groupsSplit = groupsString.split(";");
 
-			if (groupsSplit.length == 0) {
-				throw new UserException("Aucun groupe de configuré !");
-			}
-
-			for (final String groupString : groupsSplit) {
+			for (final String groupString : groupsString.split(";")) {
 				final String[] groupSplit = groupString.split(":");
 				if (groupSplit.length != 2) {
-					throw new UserException("Format des groupes incorrect dans la configuration");
+					throw new UserException("Format des groupes incorrect dans la configuration (attendu : id:nom;id:nom)");
 				}
 
 				groups.add(new Group(groupSplit[0], groupSplit[1]));
+			}
+
+			if (groups.isEmpty()) {
+				throw new UserException("Aucun groupe de configuré !");
 			}
 
 			return new Preferences(configPath, folder, url, user, password, groups, cookieSession, synoToken, cookieDid);
@@ -76,33 +91,31 @@ public class Preferences {
 		}
 	}
 
+	private static String getRequiredProperty(final Properties prop, final String key) {
+		final String value = prop.getProperty(key);
+		if (value == null || value.isBlank()) {
+			throw new UserException("Propriété '" + key + "' manquante dans la configuration");
+		}
+		return value;
+	}
+
 	/**
 	 * Construit un objet préférence à partir d'entrée utilisateur.
 	 */
 	public static Preferences fromPrompt(final String configFolder) {
 		final Scanner userInput = new Scanner(System.in);
 
-		System.out.println("URL des photos sur le NAS :");
-		final String nasFolder = userInput.next();
-
-		System.out.println("URL d'accès à PhotoStation :");
-		final String url = userInput.next();
-
-		System.out.println("User :");
-		final String user = userInput.next();
-
-		System.out.println("Password :");
-		final String password = userInput.next();
+		final String nasFolder = promptLine(userInput, "Répertoire des photos sur le NAS :");
+		final String url = promptLine(userInput, "URL d'accès à Synology Photos :");
+		final String user = promptLine(userInput, "User :");
+		final String password = promptLine(userInput, "Password :");
 
 		System.out.println("Configuration des groupes.");
 		int numGrp = 1;
 		final List<Group> groups = new ArrayList<>();
 		do {
-			System.out.println("Identifiant du groupe " + numGrp + " :");
-			final String groupId = userInput.next();
-
-			System.out.println("Nom du groupe " + numGrp + " :");
-			final String groupName = userInput.next();
+			final String groupId = promptLine(userInput, "Identifiant du groupe " + numGrp + " :");
+			final String groupName = promptLine(userInput, "Nom du groupe " + numGrp + " :");
 
 			groups.add(new Group(groupId, groupName));
 
@@ -110,16 +123,25 @@ public class Preferences {
 			numGrp++;
 		} while (scanBool(userInput));
 
-		userInput.close();
-
 		return new Preferences(configFolder, nasFolder, url, user, password, groups, null, null, null);
+	}
+
+	// nextLine (et pas next) pour accepter les valeurs contenant des espaces (chemins Windows...)
+	private static String promptLine(final Scanner userInput, final String label) {
+		String value;
+		do {
+			System.out.println(label);
+			value = userInput.nextLine().trim();
+		} while (value.isEmpty());
+
+		return value;
 	}
 
 	private static boolean scanBool(final Scanner userInput) {
 		boolean incorrect;
 		boolean isYes;
 		do {
-			final String rep = userInput.next();
+			final String rep = userInput.nextLine().trim();
 
 			isYes = rep.equalsIgnoreCase("oui") ||
 					rep.equalsIgnoreCase("o") ||
@@ -143,7 +165,7 @@ public class Preferences {
 	 * Ecrit les préférences dans le fichier.
 	 */
 	public void toFile() {
-		final File prefFile = new File(configPath + "/" + CONFIG_FILENAME);
+		final File prefFile = new File(configPath, CONFIG_FILENAME);
 
 		try (OutputStream output = new FileOutputStream(prefFile)) {
 
@@ -160,7 +182,6 @@ public class Preferences {
 
 			prop.setProperty("groups", groupsString);
 
-			// save properties to project root folder
 			prop.store(output, null);
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire les préférences", e);
@@ -208,7 +229,7 @@ public class Preferences {
 		return cookieSession;
 	}
 
-	public void setCookieSession(String cookieSession) {
+	public void setCookieSession(final String cookieSession) {
 		this.cookieSession = cookieSession;
 		setValueToConfigFile("cookieSession", cookieSession);
 	}
@@ -217,7 +238,7 @@ public class Preferences {
 		return synoToken;
 	}
 
-	public void setSynoToken(String synoToken) {
+	public void setSynoToken(final String synoToken) {
 		this.synoToken = synoToken;
 		setValueToConfigFile("synoToken", synoToken);
 	}
@@ -226,25 +247,27 @@ public class Preferences {
 		return cookieDid;
 	}
 
-	public void setCookieDid(String cookieDid) {
+	public void setCookieDid(final String cookieDid) {
 		this.cookieDid = cookieDid;
 		setValueToConfigFile("cookieDid", cookieDid);
 	}
 
-	private void setValueToConfigFile(String key, String value) {
-		final File prefFile = new File(configPath + "/" + CONFIG_FILENAME);
+	private void setValueToConfigFile(final String key, final String value) {
+		final File prefFile = new File(configPath, CONFIG_FILENAME);
 
-		final Properties prop;
+		final Properties prop = new Properties();
 		try (InputStream input = new FileInputStream(prefFile)) {
-			prop = new Properties();
 			prop.load(input);
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible de lire les préférences", e);
 		}
 
-
 		try (OutputStream output = new FileOutputStream(prefFile)) {
-			prop.setProperty(key, value);
+			if (value == null) {
+				prop.remove(key);
+			} else {
+				prop.setProperty(key, value);
+			}
 			prop.store(output, null);
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire les préférences", e);

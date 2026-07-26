@@ -7,7 +7,11 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class DeltaResolver {
+public final class DeltaResolver {
+
+	private DeltaResolver() {
+		// utility
+	}
 
 	public static final class GrpDelta {
 		private final List<Folder> toAdd = new ArrayList<>();
@@ -30,7 +34,7 @@ public class DeltaResolver {
 		}
 
 		private void doPrintAndProcess(final List<Folder> list, final String message, final Consumer<Folder> action) {
-			if (list.size() > 0) {
+			if (!list.isEmpty()) {
 				System.out.println("\t" + message);
 
 				for (final Folder folder : list) {
@@ -79,24 +83,10 @@ public class DeltaResolver {
 	// de la map
 	private static void addToDeltaMap(final Map<Group, GrpDelta> map, final Folder folder, final List<Group> grpToRemove, final List<Group> grpToAdd) {
 		for (final Group grp : grpToRemove) {
-			doAddToDeltaMap(map, folder, grp, GrpDelta::getToRemove);
+			map.computeIfAbsent(grp, g -> new GrpDelta()).getToRemove().add(folder);
 		}
 		for (final Group grp : grpToAdd) {
-			doAddToDeltaMap(map, folder, grp, GrpDelta::getToAdd);
+			map.computeIfAbsent(grp, g -> new GrpDelta()).getToAdd().add(folder);
 		}
-	}
-
-	// ajoute le folder dans le bon attribut du delta de la map (créé ce qu'il faut
-	// si nécessiare)
-	private static void doAddToDeltaMap(final Map<Group, GrpDelta> map, final Folder folder, final Group grp, final Function<GrpDelta, List<Folder>> deltaGrpAccessor) {
-		final GrpDelta delta;
-		if (map.containsKey(grp)) {
-			delta = map.get(grp);
-		} else {
-			delta = new GrpDelta();
-			map.put(grp, delta);
-		}
-
-		deltaGrpAccessor.apply(delta).add(folder);
 	}
 }

@@ -1,5 +1,13 @@
 package sk.synoAdmin.synology;
 
+import java.io.Console;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Scanner;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
@@ -16,10 +24,6 @@ import sk.synoAdmin.synology.pojo.SynoAccessRightResponse;
 import sk.synoAdmin.synology.pojo.SynoLoginResponse;
 import sk.synoAdmin.synology.pojo.SynoPermissionResponse;
 import sk.synoAdmin.synology.pojo.SynoSetAccessRightResponse;
-
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 public class SynoApiClient {
 
@@ -69,7 +73,7 @@ public class SynoApiClient {
 				form.param("version", "1");
 
 				final var response = doRequest("/webapi/entry.cgi", form);
-				SynoLoginResponse responseParsed = response.readEntity(SynoLoginResponse.class);
+				final SynoLoginResponse responseParsed = response.readEntity(SynoLoginResponse.class);
 				isLogged = responseParsed.isSuccess();
 			}
 
@@ -86,8 +90,7 @@ public class SynoApiClient {
 				if (pref.getPassword() != null) {
 					pwd = pref.getPassword();
 				} else {
-					System.out.println("Password ?");
-					pwd = new Scanner(System.in).next();
+					pwd = promptSecret("Password ?");
 				}
 				form.param("passwd", pwd);
 
@@ -95,8 +98,7 @@ public class SynoApiClient {
 
 				SynoLoginResponse responseParsed = response.readEntity(SynoLoginResponse.class);
 				if (!responseParsed.isSuccess() && "otp".equals(responseParsed.getError().getErrorType())) {
-					System.out.println("OTP ?");
-					final String otp = new Scanner(System.in).next();
+					final String otp = promptValue("OTP ?");
 					form.param("otp_code", otp);
 					form.param("enable_device_token", "yes");
 
@@ -121,20 +123,34 @@ public class SynoApiClient {
 		}, "Login time");
 	}
 
-	public List<SynoPermissionResponse> getAccessRight() {
-		List<SynoPermissionResponse> list = new ArrayList<>();
+	private static String promptValue(final String label) {
+		System.out.println(label);
+		return new Scanner(System.in).next();
+	}
 
-		SynoAccessRightResponse responseData = getSynoAccessRightResponse(null);
+	private static String promptSecret(final String label) {
+		final Console console = System.console();
+		if (console != null) {
+			// saisie masquée quand une vraie console est disponible
+			return new String(console.readPassword(label + " "));
+		}
+		return promptValue(label);
+	}
+
+	public List<SynoPermissionResponse> getAccessRight() {
+		final List<SynoPermissionResponse> list = new ArrayList<>();
+
+		final SynoAccessRightResponse responseData = getSynoAccessRightResponse(null);
 		list.addAll(responseData.getPermissions());
 
-		for (var rootFolder : responseData.getPermissions()) {
+		for (final var rootFolder : responseData.getPermissions()) {
 			list.addAll(getSynoAccessRightResponse(rootFolder.getId()).getPermissions());
 		}
 
 		return list;
 	}
 
-	public SynoAccessRightResponse getSynoAccessRightResponse(Integer id) {
+	public SynoAccessRightResponse getSynoAccessRightResponse(final Integer id) {
 		LogUtil.debug("List folders for id " + id);
 
 		final Form form = new Form();
@@ -149,7 +165,7 @@ public class SynoApiClient {
 		form.param("additional", "[\"sharing_info\"]");
 
 		final var response = doRequest("/webapi/entry.cgi/SYNO.FotoTeam.Browse.Folder", form);
-		SynoAccessRightResponse responseData = response.readEntity(SynoAccessRightResponse.class);
+		final SynoAccessRightResponse responseData = response.readEntity(SynoAccessRightResponse.class);
 
 		if (!responseData.isSuccess()) {
 			throw new UserException("Impossible de récupérer les droits");
@@ -159,9 +175,9 @@ public class SynoApiClient {
 	}
 
 
-	private String buildPermissionActionString(List<Folder> folders, String role) {
-		String action = role == null ? "delete" : "update";
-		String jsonRole = role != null ? ",\"role\":\"" + role + "\"" : "";
+	private String buildPermissionActionString(final List<Folder> folders, final String role) {
+		final String action = role == null ? "delete" : "update";
+		final String jsonRole = role != null ? ",\"role\":\"" + role + "\"" : "";
 		return folders.stream()
 				.map(folder -> "{\"folder_id\":" + folder.getId() + ",\"action\":\"" + action + "\"" + jsonRole + "}")
 				.collect(Collectors.joining(","));
@@ -174,7 +190,7 @@ public class SynoApiClient {
 		form.param("method", "update_by_member");
 
 		String permissions = buildPermissionActionString(foldersToAddList, "download");
-		if (permissions.length() > 0 && foldersToDeleteList.size() > 0) {
+		if (!permissions.isEmpty() && !foldersToDeleteList.isEmpty()) {
 			permissions += ",";
 		}
 		permissions += buildPermissionActionString(foldersToDeleteList, null);
@@ -193,11 +209,11 @@ public class SynoApiClient {
 	}
 
 	public SynoSetAccessRightResponse addAccessRight(final String gid, final Folder... foldersToAdd) {
-		return setAccessRight(gid, Arrays.asList(foldersToAdd), new ArrayList<>(0));
+		return setAccessRight(gid, Arrays.asList(foldersToAdd), List.of());
 	}
 
 	public SynoSetAccessRightResponse removeAccessRight(final String gid, final Folder... folderToDelete) {
-		return setAccessRight(gid, new ArrayList<>(0), Arrays.asList(folderToDelete));
+		return setAccessRight(gid, List.of(), Arrays.asList(folderToDelete));
 	}
 
 
@@ -216,8 +232,6 @@ public class SynoApiClient {
 			builder.header("X-SYNO-TOKEN", synoToken);
 		}
 
-		final Response response = builder.post(Entity.form(form));
-
-		return response;
+		return builder.post(Entity.form(form));
 	}
 }

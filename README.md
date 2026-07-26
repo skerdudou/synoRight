@@ -19,7 +19,7 @@ java -jar PhotostationAdmin-<version>-shaded.jar -a <action> [-c <dossierConfig>
 
 Actions :
 
-- `INIT` : crée le fichier de configuration en posant des questions (URL, compte, groupes...)
+- `INIT` : crée le fichier de configuration en posant des questions (URL, compte, groupes...), teste le login et vérifie que les groupes configurés existent sur le NAS
 - `TEST_CONNEXION` : login + lecture complète FS et Synology Photos, sans modification
 - `FULL_DB_TO_FS` : crée/supprime les fichiers `.synoRight` sur le NAS d'après les droits Synology Photos
 - `FULL_FS_TO_DB` : applique dans Synology Photos les droits décrits par les fichiers `.synoRight`
@@ -47,7 +47,7 @@ groups=3:famille;5:amis
 mvn package
 ```
 
-Produit `target/PhotostationAdmin-<version>-shaded.jar` (jar exécutable autonome). Nécessite Java 17+.
+Produit `target/PhotostationAdmin-<version>-shaded.jar` (jar exécutable autonome). Nécessite Java 25+.
 
 ## Intégration Explorateur Windows
 

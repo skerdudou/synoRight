@@ -21,6 +21,8 @@ import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Folder;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.pojo.SynoAccessRightResponse;
+import sk.synoAdmin.synology.pojo.SynoGroupListResponse;
+import sk.synoAdmin.synology.pojo.SynoGroupListResponse.SynoGroup;
 import sk.synoAdmin.synology.pojo.SynoLoginResponse;
 import sk.synoAdmin.synology.pojo.SynoPermissionResponse;
 import sk.synoAdmin.synology.pojo.SynoSetAccessRightResponse;
@@ -135,6 +137,28 @@ public class SynoApiClient {
 			return new String(console.readPassword(label + " "));
 		}
 		return promptValue(label);
+	}
+
+	/**
+	 * Liste les groupes locaux du NAS (API SYNO.Core.Group).
+	 */
+	public List<SynoGroup> getGroups() {
+		final Form form = new Form();
+		form.param("api", "SYNO.Core.Group");
+		form.param("method", "list");
+		form.param("version", "1");
+		form.param("offset", "0");
+		form.param("limit", "5000");
+		form.param("type", "local");
+
+		final var response = doRequest("/webapi/entry.cgi", form);
+		final SynoGroupListResponse responseData = response.readEntity(SynoGroupListResponse.class);
+
+		if (!responseData.isSuccess()) {
+			throw new UserException("Impossible de récupérer la liste des groupes du NAS");
+		}
+
+		return responseData.getGroups();
 	}
 
 	public List<SynoPermissionResponse> getAccessRight() {

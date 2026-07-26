@@ -256,10 +256,12 @@ public class Preferences {
 		final File prefFile = new File(configPath, CONFIG_FILENAME);
 
 		final Properties prop = new Properties();
-		try (InputStream input = new FileInputStream(prefFile)) {
-			prop.load(input);
-		} catch (final IOException e) {
-			throw new RuntimeException("Impossible de lire les préférences", e);
+		if (prefFile.isFile()) {
+			try (InputStream input = new FileInputStream(prefFile)) {
+				prop.load(input);
+			} catch (final IOException e) {
+				throw new RuntimeException("Impossible de lire les préférences", e);
+			}
 		}
 
 		try (OutputStream output = new FileOutputStream(prefFile)) {

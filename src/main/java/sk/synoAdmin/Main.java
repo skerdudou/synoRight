@@ -1,13 +1,19 @@
 package sk.synoAdmin;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import picocli.CommandLine;
 import picocli.CommandLine.ParameterException;
 import sk.synoAdmin.CliParams.Actions;
+import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.RightEngine;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.SynoApiClient;
+import sk.synoAdmin.synology.pojo.SynoGroupListResponse.SynoGroup;
 
 public class Main {
 
@@ -93,11 +99,52 @@ public class Main {
 
 	private static void createPrefs() {
 		final Preferences pref = Preferences.fromPrompt("./");
-
-		new SynoApiClient(pref); // test d'accès à l'API
-		// TODO : check groups
-
 		pref.toFile();
+
+		// test d'accès à l'API (le login persiste la session dans le fichier tout juste créé)
+		final SynoApiClient synoClient = new SynoApiClient(pref);
+		synoClient.login();
+
+		checkGroups(synoClient, pref);
+	}
+
+	/**
+	 * Vérifie que les groupes configurés existent bien sur le NAS (id et nom).
+	 */
+	private static void checkGroups(final SynoApiClient synoClient, final Preferences pref) {
+		final List<SynoGroup> nasGroups;
+		try {
+			nasGroups = synoClient.getGroups();
+		} catch (final RuntimeException e) {
+			// vérification best-effort : la conf est déjà écrite, on ne bloque pas l'INIT
+			System.out.println("Impossible de vérifier les groupes configurés : " + e.getMessage());
+			return;
+		}
+
+		final List<String> problems = new ArrayList<>();
+		for (final Group grp : pref.getGroups()) {
+			final Optional<SynoGroup> nasGroup = nasGroups.stream()
+					.filter(g -> String.valueOf(g.getGid()).equals(grp.getId()))
+					.findAny();
+
+			if (nasGroup.isEmpty()) {
+				problems.add("Le groupe '" + grp.getName() + "' (id " + grp.getId() + ") n'existe pas sur le NAS.");
+			} else if (!nasGroup.get().getName().equalsIgnoreCase(grp.getName())) {
+				System.out.println("Attention : le groupe d'id " + grp.getId() + " s'appelle '" + nasGroup.get().getName()
+						+ "' sur le NAS, mais '" + grp.getName() + "' dans la configuration.");
+			}
+		}
+
+		if (!problems.isEmpty()) {
+			final String available = nasGroups.stream()
+					.map(g -> g.getGid() + ":" + g.getName())
+					.collect(Collectors.joining(", "));
+			throw new UserException(String.join("\n", problems)
+					+ "\nGroupes disponibles sur le NAS : " + available
+					+ "\nCorriger le fichier de configuration ou relancer INIT.");
+		}
+
+		System.out.println("Groupes vérifiés sur le NAS : OK.");
 	}
 
 }

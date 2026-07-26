@@ -64,7 +64,15 @@ public class Preferences {
 			final String folder = getRequiredProperty(prop, "folder");
 			final String url = getRequiredProperty(prop, "url");
 			final String user = getRequiredProperty(prop, "user");
-			final String password = CryptoUtils.decrypt(prop.getProperty("password"));
+			final String rawPassword = prop.getProperty("password");
+			String password = null;
+			if (rawPassword != null) {
+				try {
+					password = CryptoUtils.decrypt(rawPassword);
+				} catch (final RuntimeException e) {
+					System.out.println("Impossible de déchiffrer le mot de passe stocké (clé changée ?) : il sera demandé à la connexion.");
+				}
+			}
 			final String groupsString = getRequiredProperty(prop, "groups");
 			final String cookieSession = prop.getProperty("cookieSession");
 			final String synoToken = prop.getProperty("synoToken");
@@ -85,7 +93,15 @@ public class Preferences {
 				throw new UserException("Aucun groupe de configuré !");
 			}
 
-			return new Preferences(configPath, folder, url, user, password, groups, cookieSession, synoToken, cookieDid);
+			final Preferences preferences = new Preferences(configPath, folder, url, user, password, groups, cookieSession, synoToken, cookieDid);
+
+			// migration de l'ancien chiffrement (Blowfish, clé en dur) vers AES-GCM
+			if (password != null && !CryptoUtils.isCurrentFormat(rawPassword)) {
+				preferences.setValueToConfigFile("password", CryptoUtils.encrypt(password));
+				System.out.println("Mot de passe re-chiffré au nouveau format (clé : " + CryptoUtils.keyFile() + ").");
+			}
+
+			return preferences;
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible de lire les préférences", e);
 		}

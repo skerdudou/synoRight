@@ -45,6 +45,8 @@ password=...
 groups=3:famille;5:amis
 ```
 
+Le mot de passe est chiffré en AES-GCM avec une clé aléatoire propre au poste, stockée dans `~/.synoRight/key` (accès restreint au propriétaire). Les configurations à l'ancien format sont re-chiffrées automatiquement à la première lecture. Si la clé est absente ou perdue, le mot de passe est simplement redemandé à la connexion ; pour utiliser la même configuration sur un autre poste, copier aussi le fichier de clé.
+
 ## Build
 
 ```

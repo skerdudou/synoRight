@@ -16,6 +16,13 @@ import sk.synoAdmin.UserException;
 
 class PreferencesTest {
 
+	static {
+		// ne pas toucher la clé réelle de l'utilisateur quand les tests tournent hors de maven
+		if (System.getProperty("synoRight.keyFile") == null) {
+			System.setProperty("synoRight.keyFile", System.getProperty("java.io.tmpdir") + "/synoRight-test.key");
+		}
+	}
+
 	@TempDir
 	Path tempDir;
 
@@ -45,6 +52,21 @@ class PreferencesTest {
 	void fromFile_passwordDechiffre() throws IOException {
 		writeConfig("folder=f\nurl=u\nuser=admin\npassword=" + CryptoUtils.encrypt("s3cret") + "\ngroups=3:famille\n");
 
+		assertEquals("s3cret", readPrefs().getPassword());
+	}
+
+	@Test
+	void fromFile_ancienFormatDePassword_migreVersAesGcm() throws Exception {
+		writeConfig("folder=f\nurl=u\nuser=admin\npassword=" + CryptoUtilsTest.legacyEncrypt("s3cret") + "\ngroups=3:famille\n");
+
+		assertEquals("s3cret", readPrefs().getPassword());
+
+		// le fichier a été réécrit au nouveau format, toujours déchiffrable
+		final String migrated = Files.readAllLines(tempDir.resolve(Preferences.CONFIG_FILENAME)).stream()
+				.filter(l -> l.startsWith("password="))
+				.findAny().orElseThrow()
+				.substring("password=".length());
+		assertTrue(migrated.startsWith("v2\\:"));
 		assertEquals("s3cret", readPrefs().getPassword());
 	}
 

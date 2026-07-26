@@ -118,7 +118,7 @@ class PreferencesTest {
 	}
 
 	@Test
-	void setCookieSession_persisteDansLeFichier() throws IOException {
+	void setCookieSession_persisteChiffreDansLeFichier() throws IOException {
 		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
 
 		readPrefs().setCookieSession("abc123");
@@ -127,5 +127,30 @@ class PreferencesTest {
 		assertEquals("abc123", relu.getCookieSession());
 		// les autres propriétés ne sont pas perdues
 		assertEquals("admin", relu.getUser());
+		// et la valeur n'est pas en clair dans le fichier
+		assertEquals("v2\\:", configLineValue("cookieSession").substring(0, 4));
+	}
+
+	@Test
+	void fromFile_sessionEnClair_migreVersChiffre() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\ncookieSession=sid123\nsynoToken=tok456\n");
+
+		final Preferences pref = readPrefs();
+		assertEquals("sid123", pref.getCookieSession());
+		assertEquals("tok456", pref.getSynoToken());
+
+		// le fichier a été réécrit chiffré, toujours lisible
+		assertEquals("v2\\:", configLineValue("cookieSession").substring(0, 4));
+		assertEquals("v2\\:", configLineValue("synoToken").substring(0, 4));
+		final Preferences relu = readPrefs();
+		assertEquals("sid123", relu.getCookieSession());
+		assertEquals("tok456", relu.getSynoToken());
+	}
+
+	private String configLineValue(final String key) throws IOException {
+		return Files.readAllLines(tempDir.resolve(Preferences.CONFIG_FILENAME)).stream()
+				.filter(l -> l.startsWith(key + "="))
+				.findAny().orElseThrow()
+				.substring(key.length() + 1);
 	}
 }

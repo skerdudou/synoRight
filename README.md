@@ -29,7 +29,7 @@ Actions :
 
 Les deux synchros complètes affichent le détail des modifications puis demandent confirmation avant d'appliquer quoi que ce soit (sauf avec `-y`).
 
-Au premier login, le mot de passe (si absent de la configuration) et le code OTP sont demandés en console ; la session (`cookieSession`, `synoToken`, `cookieDid`) est ensuite mémorisée dans le fichier de configuration.
+Au premier login, le mot de passe (si absent de la configuration) et le code OTP sont demandés en console ; la session (`cookieSession`, `synoToken`, `cookieDid`) est ensuite mémorisée chiffrée dans le fichier de configuration.
 
 ## Configuration
 
@@ -45,7 +45,7 @@ password=...
 groups=3:famille;5:amis
 ```
 
-Le mot de passe est chiffré en AES-GCM avec une clé aléatoire propre au poste, stockée dans `~/.synoRight/key` (accès restreint au propriétaire). Les configurations à l'ancien format sont re-chiffrées automatiquement à la première lecture. Si la clé est absente ou perdue, le mot de passe est simplement redemandé à la connexion ; pour utiliser la même configuration sur un autre poste, copier aussi le fichier de clé.
+Le mot de passe et la session (`cookieSession`, `synoToken`, `cookieDid`) sont chiffrés en AES-GCM avec une clé aléatoire propre au poste, stockée dans `~/.synoRight/key` (accès restreint au propriétaire). Les configurations à l'ancien format sont re-chiffrées automatiquement à la première lecture. Si la clé est absente ou perdue, le mot de passe est simplement redemandé à la connexion (et la session recréée) ; pour utiliser la même configuration sur un autre poste, copier aussi le fichier de clé.
 
 ## Build
 

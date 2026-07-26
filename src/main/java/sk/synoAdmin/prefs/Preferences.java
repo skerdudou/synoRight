@@ -74,9 +74,9 @@ public class Preferences {
 				}
 			}
 			final String groupsString = getRequiredProperty(prop, "groups");
-			final String cookieSession = prop.getProperty("cookieSession");
-			final String synoToken = prop.getProperty("synoToken");
-			final String cookieDid = prop.getProperty("cookieDid");
+			final String cookieSession = readProtectedProperty(prop, "cookieSession");
+			final String synoToken = readProtectedProperty(prop, "synoToken");
+			final String cookieDid = readProtectedProperty(prop, "cookieDid");
 
 			final List<Group> groups = new ArrayList<>();
 
@@ -101,6 +101,14 @@ public class Preferences {
 				System.out.println("Mot de passe re-chiffré au nouveau format (clé : " + CryptoUtils.keyFile() + ").");
 			}
 
+			// migration des valeurs de session historiquement stockées en clair
+			if (hasPlainSessionValue(prop)) {
+				preferences.setCookieSession(cookieSession);
+				preferences.setSynoToken(synoToken);
+				preferences.setCookieDid(cookieDid);
+				System.out.println("Session re-chiffrée dans le fichier de configuration.");
+			}
+
 			return preferences;
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible de lire les préférences", e);
@@ -113,6 +121,33 @@ public class Preferences {
 			throw new UserException("Propriété '" + key + "' manquante dans la configuration");
 		}
 		return value;
+	}
+
+	/**
+	 * Lit une valeur de session : déchiffrée si au format courant, telle quelle si
+	 * encore en clair (ancienne config). Indéchiffrable (clé changée ?) : absente,
+	 * un nouveau login la re-créera.
+	 */
+	private static String readProtectedProperty(final Properties prop, final String key) {
+		final String raw = prop.getProperty(key);
+		if (raw == null || !CryptoUtils.isCurrentFormat(raw)) {
+			return raw;
+		}
+		try {
+			return CryptoUtils.decrypt(raw);
+		} catch (final RuntimeException e) {
+			return null;
+		}
+	}
+
+	private static boolean hasPlainSessionValue(final Properties prop) {
+		for (final String key : List.of("cookieSession", "synoToken", "cookieDid")) {
+			final String raw = prop.getProperty(key);
+			if (raw != null && !CryptoUtils.isCurrentFormat(raw)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -209,7 +244,7 @@ public class Preferences {
 
 	public void setCookieSession(final String cookieSession) {
 		this.cookieSession = cookieSession;
-		setValueToConfigFile("cookieSession", cookieSession);
+		setProtectedValueToConfigFile("cookieSession", cookieSession);
 	}
 
 	public String getSynoToken() {
@@ -218,7 +253,7 @@ public class Preferences {
 
 	public void setSynoToken(final String synoToken) {
 		this.synoToken = synoToken;
-		setValueToConfigFile("synoToken", synoToken);
+		setProtectedValueToConfigFile("synoToken", synoToken);
 	}
 
 	public String getCookieDid() {
@@ -227,7 +262,12 @@ public class Preferences {
 
 	public void setCookieDid(final String cookieDid) {
 		this.cookieDid = cookieDid;
-		setValueToConfigFile("cookieDid", cookieDid);
+		setProtectedValueToConfigFile("cookieDid", cookieDid);
+	}
+
+	// écrit une valeur sensible chiffrée avec la clé du poste
+	private void setProtectedValueToConfigFile(final String key, final String value) {
+		setValueToConfigFile(key, value == null ? null : CryptoUtils.encrypt(value));
 	}
 
 	private void setValueToConfigFile(final String key, final String value) {

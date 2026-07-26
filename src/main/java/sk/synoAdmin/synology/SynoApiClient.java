@@ -40,6 +40,8 @@ public class SynoApiClient {
 		this.pref = pref;
 		httpClient = HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(10))
+				// suit les redirections (comportement du client Jersey d'origine)
+				.followRedirects(HttpClient.Redirect.NORMAL)
 				.build();
 	}
 

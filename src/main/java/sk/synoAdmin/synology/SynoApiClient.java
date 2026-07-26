@@ -1,10 +1,8 @@
 package sk.synoAdmin.synology;
 
-import java.io.Console;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -16,6 +14,7 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.Form;
 import jakarta.ws.rs.core.Response;
+import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Folder;
@@ -92,7 +91,7 @@ public class SynoApiClient {
 				if (pref.getPassword() != null) {
 					pwd = pref.getPassword();
 				} else {
-					pwd = promptSecret("Password ?");
+					pwd = ConsoleUtil.promptSecret("Password ?");
 				}
 				form.param("passwd", pwd);
 
@@ -100,7 +99,7 @@ public class SynoApiClient {
 
 				SynoLoginResponse responseParsed = response.readEntity(SynoLoginResponse.class);
 				if (!responseParsed.isSuccess() && "otp".equals(responseParsed.getError().getErrorType())) {
-					final String otp = promptValue("OTP ?");
+					final String otp = ConsoleUtil.promptLine("OTP ?");
 					form.param("otp_code", otp);
 					form.param("enable_device_token", "yes");
 
@@ -123,20 +122,6 @@ public class SynoApiClient {
 
 			// https://community.synology.com/enu/forum/1/post/145996
 		}, "Login time");
-	}
-
-	private static String promptValue(final String label) {
-		System.out.println(label);
-		return new Scanner(System.in).next();
-	}
-
-	private static String promptSecret(final String label) {
-		final Console console = System.console();
-		if (console != null) {
-			// saisie masquée quand une vraie console est disponible
-			return new String(console.readPassword(label + " "));
-		}
-		return promptValue(label);
 	}
 
 	/**

@@ -1,5 +1,6 @@
 package sk.synoAdmin;
 
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +54,11 @@ public class Main {
 			return;
 		}
 
+		if (cliParams.getAction() == Actions.UNINSTALL_MENU) {
+			ContextMenuInstaller.uninstall();
+			return;
+		}
+
 		if (cliParams.getAction() == Actions.ADD_GRP || cliParams.getAction() == Actions.DEL_GRP) {
 			if (cliParams.getGroupName() == null) {
 				throw new UserException("Le paramètre de groupe est obligatoire");
@@ -66,6 +72,12 @@ public class Main {
 				() -> Preferences.fromFile(cliParams.getConfigFolder()),
 				"Prefs time");
 
+		if (cliParams.getAction() == Actions.INSTALL_MENU) {
+			ContextMenuInstaller.install(pref.getGroups(), pref.getNasFolder(),
+					Paths.get(cliParams.getConfigFolder()).toAbsolutePath().normalize());
+			return;
+		}
+
 		final RightEngine re = new RightEngine(pref);
 
 		switch (cliParams.getAction()) {
@@ -74,11 +86,11 @@ public class Main {
 				break;
 			case FULL_DB_TO_FS:
 				re.getFullState();
-				LogUtil.runMonitored(re::dbToFs, "Action time");
+				LogUtil.runMonitored(() -> re.dbToFs(cliParams.isYes()), "Action time");
 				break;
 			case FULL_FS_TO_DB:
 				re.getFullState();
-				LogUtil.runMonitored(re::fsToDb, "Action time");
+				LogUtil.runMonitored(() -> re.fsToDb(cliParams.isYes()), "Action time");
 				break;
 			case ADD_GRP:
 				re.login();

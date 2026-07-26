@@ -16,11 +16,14 @@ public final class CliParams {
 	@Option(names = { "-a", "--action" }, required = true, description = "Actions, parmi : ${COMPLETION-CANDIDATES}")
 	private Actions action;
 
+	@Option(names = { "-y", "--yes" }, description = "Applique les synchros complètes sans demander de confirmation")
+	private boolean yes;
+
 	@Option(names = { "-h", "--help" }, usageHelp = true, description = "display this help message")
 	private boolean usageHelpRequested;
 
 	public enum Actions {
-		INIT, ADD_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB, TEST_CONNEXION
+		INIT, ADD_GRP, DEL_GRP, FULL_DB_TO_FS, FULL_FS_TO_DB, TEST_CONNEXION, INSTALL_MENU, UNINSTALL_MENU
 	}
 
 	public String getConfigFolder() {
@@ -37,6 +40,10 @@ public final class CliParams {
 
 	public Actions getAction() {
 		return action;
+	}
+
+	public boolean isYes() {
+		return yes;
 	}
 
 	public boolean isUsageHelpRequested() {

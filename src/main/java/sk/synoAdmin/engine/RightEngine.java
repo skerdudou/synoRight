@@ -14,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
+import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.DeltaResolver.GrpDelta;
@@ -127,21 +128,22 @@ public class RightEngine {
 		synoClient.login();
 	}
 
-	// créé les fichiers sur le NAS en fonction des droits de PhotoStation
-	public void dbToFs() {
+	// créé les fichiers sur le NAS en fonction des droits de Synology Photos
+	public void dbToFs(final boolean assumeYes) {
 		System.out.println("Mise à jour des fichiers de droits sur le filesystem.");
 
 		final Map<Group, GrpDelta> grpDeltas = DeltaResolver.resolveDeltasDbToFs(folders);
+		if (!printAndConfirmDeltas(grpDeltas, assumeYes)) {
+			return;
+		}
+
 		for (final Entry<Group, GrpDelta> grpDeltaEntry : grpDeltas.entrySet()) {
 			final Group group = grpDeltaEntry.getKey();
 			final GrpDelta grpDelta = grpDeltaEntry.getValue();
 
-			System.out.println("Groupe '" + group.getName() + "' :");
-
-			grpDelta.printAndProcessAdd(f -> doCreateRightFile(group, f));
-			grpDelta.printAndProcessRemove(f -> doRemoveRightFile(group, f));
+			grpDelta.processAdd(f -> doCreateRightFile(group, f));
+			grpDelta.processRemove(f -> doRemoveRightFile(group, f));
 		}
-
 	}
 
 	private void doCreateRightFile(final Group group, final Folder folder) {
@@ -165,23 +167,42 @@ public class RightEngine {
 		return new File(folder.getFolderPath(), group.getFileName());
 	}
 
-	// Mets a jour les droits dans PhotoStation en fonction des fichiers sur le NAS
-	public void fsToDb() {
-		System.out.println("Mise à jour des droits dans PhotoStation.");
+	// Mets a jour les droits dans Synology Photos en fonction des fichiers sur le NAS
+	public void fsToDb(final boolean assumeYes) {
+		System.out.println("Mise à jour des droits dans Synology Photos.");
 
 		final Map<Group, GrpDelta> grpDeltas = DeltaResolver.resolveDeltasFsToDb(folders);
+		if (!printAndConfirmDeltas(grpDeltas, assumeYes)) {
+			return;
+		}
+
 		for (final Entry<Group, GrpDelta> grpDeltaEntry : grpDeltas.entrySet()) {
 			final Group group = grpDeltaEntry.getKey();
 			final GrpDelta grpDelta = grpDeltaEntry.getValue();
 
-			System.out.println("Groupe '" + group.getName() + "' :");
-
-			grpDelta.printAndProcessAdd(null);
-			grpDelta.printAndProcessRemove(null);
-
 			// add download role (or remove)
 			synoClient.setAccessRight(group.getId(), grpDelta.getToAdd(), grpDelta.getToRemove());
 		}
+	}
+
+	// affiche le détail des deltas puis demande confirmation avant application
+	private boolean printAndConfirmDeltas(final Map<Group, GrpDelta> grpDeltas, final boolean assumeYes) {
+		if (grpDeltas.isEmpty()) {
+			System.out.println("Aucune modification à appliquer.");
+			return false;
+		}
+
+		for (final Entry<Group, GrpDelta> grpDeltaEntry : grpDeltas.entrySet()) {
+			System.out.println("Groupe '" + grpDeltaEntry.getKey().getName() + "' :");
+			grpDeltaEntry.getValue().printAdd();
+			grpDeltaEntry.getValue().printRemove();
+		}
+
+		if (!assumeYes && !ConsoleUtil.promptBool("Appliquer ces modifications ?")) {
+			System.out.println("Abandon, aucune modification effectuée.");
+			return false;
+		}
+		return true;
 	}
 
 	public void addRightToFolder(final String folder, final Group grp) {

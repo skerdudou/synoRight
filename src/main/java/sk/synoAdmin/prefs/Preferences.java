@@ -11,9 +11,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.Scanner;
 import java.util.stream.Collectors;
 
+import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
 
@@ -103,62 +103,24 @@ public class Preferences {
 	 * Construit un objet préférence à partir d'entrée utilisateur.
 	 */
 	public static Preferences fromPrompt(final String configFolder) {
-		final Scanner userInput = new Scanner(System.in);
-
-		final String nasFolder = promptLine(userInput, "Répertoire des photos sur le NAS :");
-		final String url = promptLine(userInput, "URL d'accès à Synology Photos :");
-		final String user = promptLine(userInput, "User :");
-		final String password = promptLine(userInput, "Password :");
+		final String nasFolder = ConsoleUtil.promptLine("Répertoire des photos sur le NAS :");
+		final String url = ConsoleUtil.promptLine("URL d'accès à Synology Photos :");
+		final String user = ConsoleUtil.promptLine("User :");
+		final String password = ConsoleUtil.promptSecret("Password :");
 
 		System.out.println("Configuration des groupes.");
 		int numGrp = 1;
 		final List<Group> groups = new ArrayList<>();
 		do {
-			final String groupId = promptLine(userInput, "Identifiant du groupe " + numGrp + " :");
-			final String groupName = promptLine(userInput, "Nom du groupe " + numGrp + " :");
+			final String groupId = ConsoleUtil.promptLine("Identifiant du groupe " + numGrp + " :");
+			final String groupName = ConsoleUtil.promptLine("Nom du groupe " + numGrp + " :");
 
 			groups.add(new Group(groupId, groupName));
 
-			System.out.println("Ajouter un nouveau groupe ?");
 			numGrp++;
-		} while (scanBool(userInput));
+		} while (ConsoleUtil.promptBool("Ajouter un nouveau groupe ?"));
 
 		return new Preferences(configFolder, nasFolder, url, user, password, groups, null, null, null);
-	}
-
-	// nextLine (et pas next) pour accepter les valeurs contenant des espaces (chemins Windows...)
-	private static String promptLine(final Scanner userInput, final String label) {
-		String value;
-		do {
-			System.out.println(label);
-			value = userInput.nextLine().trim();
-		} while (value.isEmpty());
-
-		return value;
-	}
-
-	private static boolean scanBool(final Scanner userInput) {
-		boolean incorrect;
-		boolean isYes;
-		do {
-			final String rep = userInput.nextLine().trim();
-
-			isYes = rep.equalsIgnoreCase("oui") ||
-					rep.equalsIgnoreCase("o") ||
-					rep.equalsIgnoreCase("yes") ||
-					rep.equalsIgnoreCase("y");
-
-			final boolean isNo = rep.equalsIgnoreCase("non") ||
-					rep.equalsIgnoreCase("n") ||
-					rep.equalsIgnoreCase("no");
-
-			incorrect = !isYes && !isNo;
-			if (incorrect) {
-				System.out.println("Répondre par oui ou non");
-			}
-		} while (incorrect);
-
-		return isYes;
 	}
 
 	/**

@@ -25,26 +25,30 @@ public final class DeltaResolver {
 			return toRemove;
 		}
 
-		public void printAndProcessAdd(final Consumer<Folder> action) {
-			doPrintAndProcess(toAdd, "Ajout des droits pour les répertoires :", action);
+		public void printAdd() {
+			print(toAdd, "Ajout des droits pour les répertoires :");
 		}
 
-		public void printAndProcessRemove(final Consumer<Folder> action) {
-			doPrintAndProcess(toRemove, "Suppression des droits pour les répertoires :", action);
+		public void printRemove() {
+			print(toRemove, "Suppression des droits pour les répertoires :");
 		}
 
-		private void doPrintAndProcess(final List<Folder> list, final String message, final Consumer<Folder> action) {
+		private void print(final List<Folder> list, final String message) {
 			if (!list.isEmpty()) {
 				System.out.println("\t" + message);
 
 				for (final Folder folder : list) {
 					System.out.println("\t\t" + folder.getName());
-
-					if (action != null) {
-						action.accept(folder);
-					}
 				}
 			}
+		}
+
+		public void processAdd(final Consumer<Folder> action) {
+			toAdd.forEach(action);
+		}
+
+		public void processRemove(final Consumer<Folder> action) {
+			toRemove.forEach(action);
 		}
 	}
 

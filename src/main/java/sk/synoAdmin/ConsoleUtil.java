@@ -32,10 +32,24 @@ public final class ConsoleUtil {
 	 */
 	public static String promptSecret(final String label) {
 		final Console console = System.console();
-		if (console != null) {
+		if (console != null && console.isTerminal()) {
 			return new String(console.readPassword(label + " "));
 		}
 		return promptLine(label);
+	}
+
+	/**
+	 * Attend Entrée avant de rendre la main, pour laisser lire la sortie quand la
+	 * fenêtre de console va se fermer (lancement depuis le menu contextuel).
+	 * Sans console interactive (script, flux redirigés), ne bloque pas.
+	 */
+	public static void pauseBeforeExit() {
+		final Console console = System.console();
+		if (console == null || !console.isTerminal()) {
+			return;
+		}
+		System.out.println("Appuyer sur Entrée pour fermer...");
+		console.readLine();
 	}
 
 	/**

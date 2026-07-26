@@ -4,7 +4,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import picocli.CommandLine;
@@ -18,7 +17,8 @@ import sk.synoAdmin.synology.pojo.SynoGroupListResponse.SynoGroup;
 
 public class Main {
 
-	public static void main(final String[] args) throws InterruptedException {
+	public static void main(final String[] args) {
+		int exitCode = 0;
 		try {
 			LogUtil.runMonitored(() -> {
 				doMain(args);
@@ -26,16 +26,19 @@ public class Main {
 		} catch (final ParameterException e) {
 			System.err.println(e.getMessage());
 			e.getCommandLine().usage(System.err);
-			TimeUnit.SECONDS.sleep(25);
+			exitCode = 2;
 		} catch (final UserException e) {
 			System.err.println(e.getMessage());
-			TimeUnit.SECONDS.sleep(25);
+			exitCode = 1;
 		} catch (final Exception e) {
 			e.printStackTrace();
-			TimeUnit.SECONDS.sleep(25);
-		} finally {
-			// laisse le temps de lire la console quand on est lancé depuis le menu contextuel
-			TimeUnit.SECONDS.sleep(5);
+			exitCode = 1;
+		}
+
+		ConsoleUtil.pauseBeforeExit();
+
+		if (exitCode != 0) {
+			System.exit(exitCode);
 		}
 	}
 

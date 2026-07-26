@@ -13,7 +13,7 @@ import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.RightEngine;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.SynoApiClient;
-import sk.synoAdmin.synology.pojo.SynoGroupListResponse.SynoGroup;
+import sk.synoAdmin.synology.SynoGroup;
 
 public class Main {
 
@@ -139,20 +139,20 @@ public class Main {
 		final List<String> problems = new ArrayList<>();
 		for (final Group grp : pref.getGroups()) {
 			final Optional<SynoGroup> nasGroup = nasGroups.stream()
-					.filter(g -> String.valueOf(g.getGid()).equals(grp.getId()))
+					.filter(g -> String.valueOf(g.gid()).equals(grp.getId()))
 					.findAny();
 
 			if (nasGroup.isEmpty()) {
 				problems.add("Le groupe '" + grp.getName() + "' (id " + grp.getId() + ") n'existe pas sur le NAS.");
-			} else if (!nasGroup.get().getName().equalsIgnoreCase(grp.getName())) {
-				System.out.println("Attention : le groupe d'id " + grp.getId() + " s'appelle '" + nasGroup.get().getName()
+			} else if (!nasGroup.get().name().equalsIgnoreCase(grp.getName())) {
+				System.out.println("Attention : le groupe d'id " + grp.getId() + " s'appelle '" + nasGroup.get().name()
 						+ "' sur le NAS, mais '" + grp.getName() + "' dans la configuration.");
 			}
 		}
 
 		if (!problems.isEmpty()) {
 			final String available = nasGroups.stream()
-					.map(g -> g.getGid() + ":" + g.getName())
+					.map(g -> g.gid() + ":" + g.name())
 					.collect(Collectors.joining(", "));
 			throw new UserException(String.join("\n", problems)
 					+ "\nGroupes disponibles sur le NAS : " + available

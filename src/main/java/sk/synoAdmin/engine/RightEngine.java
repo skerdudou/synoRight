@@ -20,7 +20,7 @@ import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.DeltaResolver.GrpDelta;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.SynoApiClient;
-import sk.synoAdmin.synology.pojo.SynoPermissionResponse;
+import sk.synoAdmin.synology.SynoFolderPermission;
 
 public class RightEngine {
 
@@ -95,7 +95,7 @@ public class RightEngine {
 	private void readDb() {
 		final List<Folder> foldersToScan = new ArrayList<>(folders);
 
-		for (final SynoPermissionResponse synoFolderRight : synoClient.getAccessRight()) {
+		for (final SynoFolderPermission synoFolderRight : synoClient.getAccessRight()) {
 			final Folder folder = findFolder(foldersToScan, synoFolderRight);
 			updateDbInfos(folder, synoFolderRight);
 
@@ -108,17 +108,17 @@ public class RightEngine {
 		}
 	}
 
-	private Folder findFolder(final List<Folder> foldersToScan, final SynoPermissionResponse synoFolderRight) {
+	private Folder findFolder(final List<Folder> foldersToScan, final SynoFolderPermission synoFolderRight) {
 		return foldersToScan.stream()
-				.filter(f -> f.getName().equals(synoFolderRight.getName()))
+				.filter(f -> f.getName().equals(synoFolderRight.name()))
 				.findAny()
 				.orElseThrow(() -> new UserException(
-						"Impossible de matcher les droits de '" + synoFolderRight.getName() + "' avec le fileSystem"));
+						"Impossible de matcher les droits de '" + synoFolderRight.name() + "' avec le fileSystem"));
 	}
 
-	private void updateDbInfos(final Folder folder, final SynoPermissionResponse synoRight) {
-		folder.setId(synoRight.getId());
-		for (final var grpId : synoRight.getBrowseGrpIds()) {
+	private void updateDbInfos(final Folder folder, final SynoFolderPermission synoRight) {
+		folder.setId(synoRight.id());
+		for (final var grpId : synoRight.browseGrpIds()) {
 			pref.getGroupById(grpId.toString())
 					.ifPresent(folder::addDbGroup);
 		}
@@ -257,12 +257,11 @@ public class RightEngine {
 			updateFsRight(newFolder);
 			folders.add(newFolder);
 			// Récupération des droits Synology à ce niveau
-			final var resp = synoClient.getSynoAccessRightResponse(parentId);
 			boolean found = false;
-			for (final var perm : resp.getPermissions()) {
-				if (perm.getName().equals(newFolder.getName())) {
+			for (final var perm : synoClient.listFolderPermissions(parentId)) {
+				if (perm.name().equals(newFolder.getName())) {
 					updateDbInfos(newFolder, perm);
-					parentId = perm.getId();
+					parentId = perm.id();
 					found = true;
 					break;
 				}

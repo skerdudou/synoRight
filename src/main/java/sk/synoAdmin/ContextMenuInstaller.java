@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import sk.synoAdmin.engine.Group;
 
@@ -15,8 +16,9 @@ import sk.synoAdmin.engine.Group;
  *
  * Les clés sont écrites sous HKEY_CURRENT_USER\Software\Classes : l'installation ne
  * concerne que l'utilisateur courant et ne demande pas de droits administrateur.
- * Les commandes générées pointent vers le java et le jar en cours d'exécution ;
- * relancer INSTALL_MENU après un déplacement du jar ou un changement de groupes.
+ * Les commandes générées pointent vers le lanceur en cours d'exécution (synoRight.exe
+ * ou java + jar) ; relancer 'menu install' après un déplacement de l'application.
+ * Les ajouts/suppressions de groupes ('groups add/remove') réinstallent le menu.
  */
 public final class ContextMenuInstaller {
 
@@ -36,20 +38,27 @@ public final class ContextMenuInstaller {
 	public static void install(final List<Group> groups, final String nasFolder, final Path configFolder) {
 		checkWindows();
 
-		final Path javaExe = Paths.get(System.getProperty("java.home"), "bin", "java.exe");
-		final String content = buildRegFileContent(groups, nasFolder, javaExe, currentJar(), configFolder);
+		final String content = buildRegFileContent(groups, nasFolder, currentLauncher(), configFolder);
 
 		// purge une éventuelle installation précédente (entrées de groupes obsolètes)
 		runReg(buildUninstallCommands(), true);
 
+		Path regFile = null;
 		try {
-			final Path regFile = Files.createTempFile("synoRight", ".reg");
+			regFile = Files.createTempFile("synoRight", ".reg");
 			// format .reg version 5 : UTF-16LE avec BOM
 			Files.writeString(regFile, (char) 0xFEFF + content, StandardCharsets.UTF_16LE);
 			runReg(List.of(List.of("reg", "import", regFile.toString())), false);
-			Files.delete(regFile);
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire le fichier .reg temporaire", e);
+		} finally {
+			if (regFile != null) {
+				try {
+					Files.deleteIfExists(regFile);
+				} catch (final IOException e) {
+					// fichier temporaire : sans conséquence
+				}
+			}
 		}
 
 		System.out.println("Menu contextuel installé pour l'utilisateur courant (" + groups.size() + " groupe(s) configuré(s)).");
@@ -61,7 +70,29 @@ public final class ContextMenuInstaller {
 		System.out.println("Menu contextuel désinstallé.");
 	}
 
-	static String buildRegFileContent(final List<Group> groups, final String nasFolder, final Path javaExe, final Path jarPath, final Path configFolder) {
+	/**
+	 * Indique si le menu est installé pour l'utilisateur courant (toujours faux hors Windows).
+	 */
+	public static boolean isInstalled() {
+		if (!isWindows()) {
+			return false;
+		}
+		try {
+			final Process process = new ProcessBuilder("reg", "query", FOLDER_KEY).redirectErrorStream(true).start();
+			process.getInputStream().readAllBytes();
+			return process.waitFor() == 0;
+		} catch (final IOException e) {
+			return false;
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+	}
+
+	/**
+	 * @param launcher commande de lancement de l'application (exe, ou java -jar jar)
+	 */
+	static String buildRegFileContent(final List<Group> groups, final String nasFolder, final List<String> launcher, final Path configFolder) {
 		final StringBuilder reg = new StringBuilder("Windows Registry Editor Version 5.00\r\n");
 
 		// entrée racine du menu : clic droit sur un dossier (limité à l'arborescence photo)...
@@ -75,22 +106,25 @@ public final class ContextMenuInstaller {
 				"\"MUIVerb\"=\"" + escape("Droits Synology Photos") + "\"",
 				"\"ExtendedSubCommandsKey\"=\"" + escape(SUBMENU_REF) + "\"");
 
-		final String baseCmd = "\\\"" + escape(javaExe.toString()) + "\\\" -jar \\\"" + escape(jarPath.toString())
-				+ "\\\" -c \\\"" + escape(configFolder.toString()) + "\\\"";
+		final String baseCmd = launcher.stream()
+				.map(arg -> arg.startsWith("-") ? arg : quote(arg))
+				.collect(Collectors.joining(" "))
+				+ " -c " + quote(configFolder.toString());
+		final String target = " " + quote("%V");
 
 		int index = 1;
-		appendMenuEntry(reg, index++, "dbToFs", "Full synchro Synology Photos -> Répertoire", false,
-				baseCmd + " -a FULL_DB_TO_FS");
-		appendMenuEntry(reg, index++, "fsToDb", "Full synchro Répertoire -> Synology Photos", true,
-				baseCmd + " -a FULL_FS_TO_DB");
+		appendMenuEntry(reg, index++, "show", "Voir les droits de ce dossier", false, baseCmd + " show" + target);
+		appendMenuEntry(reg, index++, "status", "État de la synchro", true, baseCmd + " status");
+		appendMenuEntry(reg, index++, "dbToFs", "Full synchro Synology Photos -> Répertoire", false, baseCmd + " pull");
+		appendMenuEntry(reg, index++, "fsToDb", "Full synchro Répertoire -> Synology Photos", true, baseCmd + " push");
 
 		for (final Group group : groups) {
 			final String keyName = group.getName().replaceAll("[^A-Za-z0-9]", "");
-			final String grpParams = " -g \\\"" + escape(group.getName()) + "\\\" -d \\\"%V\\\"";
+			final String grpParams = " " + quote(group.getName()) + target;
 			appendMenuEntry(reg, index++, "add" + keyName, "Ajouter " + group.getName(), false,
-					baseCmd + " -a ADD_GRP" + grpParams);
+					baseCmd + " grant" + grpParams);
 			appendMenuEntry(reg, index++, "del" + keyName, "Supprimer " + group.getName(), true,
-					baseCmd + " -a DEL_GRP" + grpParams);
+					baseCmd + " revoke" + grpParams);
 		}
 
 		return reg.toString();
@@ -112,6 +146,11 @@ public final class ContextMenuInstaller {
 		for (final String value : values) {
 			reg.append(value).append("\r\n");
 		}
+	}
+
+	// argument entre guillemets, échappé pour une valeur .reg
+	private static String quote(final String value) {
+		return "\\\"" + escape(value) + "\\\"";
 	}
 
 	// échappement du format .reg : backslashs et guillemets
@@ -143,20 +182,33 @@ public final class ContextMenuInstaller {
 		}
 	}
 
+	private static boolean isWindows() {
+		return System.getProperty("os.name", "").toLowerCase().startsWith("windows");
+	}
+
 	private static void checkWindows() {
-		final String osName = System.getProperty("os.name", "");
-		if (!osName.toLowerCase().startsWith("windows")) {
-			throw new UserException("L'installation du menu contextuel n'est disponible que sous Windows (OS détecté : " + osName + ").");
+		if (!isWindows()) {
+			throw new UserException("Le menu contextuel n'est disponible que sous Windows (OS détecté : " + System.getProperty("os.name", "") + ").");
 		}
 	}
 
-	private static Path currentJar() {
+	/**
+	 * Commande de lancement courante : l'exe généré par jpackage s'il est utilisé,
+	 * sinon le java courant avec le jar.
+	 */
+	private static List<String> currentLauncher() {
+		final String appPath = System.getProperty("jpackage.app-path");
+		if (appPath != null) {
+			return List.of(appPath);
+		}
+
+		final Path javaExe = Paths.get(System.getProperty("java.home"), "bin", "java.exe");
 		try {
 			final Path location = Paths.get(ContextMenuInstaller.class.getProtectionDomain().getCodeSource().getLocation().toURI());
 			if (!location.getFileName().toString().endsWith(".jar")) {
-				throw new UserException("Impossible de déterminer le jar : lancé depuis '" + location + "'. Lancer l'installation depuis le jar.");
+				throw new UserException("Impossible de déterminer le jar : lancé depuis '" + location + "'. Lancer l'installation depuis le jar ou l'exe.");
 			}
-			return location;
+			return List.of(javaExe.toString(), "-jar", location.toString());
 		} catch (final URISyntaxException e) {
 			throw new RuntimeException(e);
 		}

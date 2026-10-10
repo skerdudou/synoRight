@@ -84,4 +84,20 @@ class SynoApiClientTest {
 
 		assertEquals("{\"id\":5,\"type\":\"group\",\"list\":[{\"folder_id\":8,\"action\":\"delete\"}]}", param);
 	}
+
+	@Test
+	void describeLoginError_codesConnus() {
+		assertTrue(SynoApiClient.describeLoginError(400).contains("mot de passe incorrect"));
+		assertTrue(SynoApiClient.describeLoginError(404).contains("OTP"));
+		assertTrue(SynoApiClient.describeLoginError(407).contains("bloquée"));
+		assertTrue(SynoApiClient.describeLoginError(999).contains("999"));
+	}
+
+	@Test
+	void describeIoError_causesReseau() {
+		assertTrue(SynoApiClient.describeIoError(new java.net.ConnectException()).contains("injoignable"));
+		assertTrue(SynoApiClient.describeIoError(new java.io.IOException(new java.nio.channels.UnresolvedAddressException())).contains("hôte introuvable"));
+		assertTrue(SynoApiClient.describeIoError(new javax.net.ssl.SSLHandshakeException("PKIX")).contains("certificat"));
+		assertTrue(SynoApiClient.describeIoError(new com.fasterxml.jackson.core.JsonParseException(null, "html")).contains("DSM"));
+	}
 }

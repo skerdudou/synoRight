@@ -1,0 +1,230 @@
+package sk.synoAdmin.cli;
+
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import sk.synoAdmin.ConsoleUtil;
+import sk.synoAdmin.ContextMenuInstaller;
+import sk.synoAdmin.UserException;
+import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.prefs.Preferences;
+import sk.synoAdmin.prefs.Session;
+import sk.synoAdmin.synology.SynoApiClient;
+import sk.synoAdmin.synology.SynoGroup;
+
+/**
+ * Commandes de gestion de la configuration, de la session et du menu contextuel.
+ */
+final class ConfigCommands {
+
+	private ConfigCommands() {
+		// conteneur
+	}
+
+	static String describeGroups(final List<Group> groups) {
+		return groups.stream().map(g -> g.getName() + " (id " + g.getId() + ")").collect(Collectors.joining(", "));
+	}
+
+	/**
+	 * Signale les groupes configurés absents du NAS ou renommés.
+	 *
+	 * @return true si tout correspond
+	 */
+	static boolean checkGroups(final List<SynoGroup> nasGroups, final List<Group> groups) {
+		boolean ok = true;
+		for (final Group grp : groups) {
+			final Optional<SynoGroup> nasGroup = nasGroups.stream()
+					.filter(g -> String.valueOf(g.gid()).equals(grp.getId()))
+					.findAny();
+
+			if (nasGroup.isEmpty()) {
+				System.out.println("Attention : le groupe '" + grp.getName() + "' (id " + grp.getId() + ") n'existe plus sur le NAS.");
+				ok = false;
+			} else if (!nasGroup.get().name().equalsIgnoreCase(grp.getName())) {
+				System.out.println("Attention : le groupe d'id " + grp.getId() + " s'appelle '" + nasGroup.get().name()
+						+ "' sur le NAS, mais '" + grp.getName() + "' dans la configuration.");
+				ok = false;
+			}
+		}
+		return ok;
+	}
+
+	// les entrées de groupes du menu contextuel suivent la configuration
+	private static void refreshMenu(final Preferences pref) {
+		if (!ContextMenuInstaller.isInstalled()) {
+			return;
+		}
+		try {
+			ContextMenuInstaller.install(pref.getGroups(), pref.getNasFolder(), pref.getConfigDir());
+		} catch (final UserException e) {
+			System.out.println("Menu contextuel non mis à jour (" + e.getMessage() + ") : relancer 'synoRight menu install'.");
+		}
+	}
+
+	@Command(name = "config", description = "Affiche la configuration et vérifie l'accès au dossier photos, au NAS et aux groupes.")
+	static final class Config extends AbstractCommand {
+		@Override
+		void execute() {
+			final Preferences pref = loadPrefs();
+
+			System.out.println("Fichier        : " + pref.getConfigDir().resolve(Preferences.CONFIG_FILENAME));
+			System.out.println("Dossier photos : " + pref.getNasFolder());
+			System.out.println("URL            : " + pref.getUrl());
+			System.out.println("Compte         : " + pref.getUser());
+			System.out.println("Mot de passe   : " + (pref.getPassword() == null ? "non mémorisé (demandé à chaque connexion)" : "mémorisé (chiffré)"));
+			System.out.println("Groupes        : " + describeGroups(pref.getGroups()));
+			System.out.println("Verbose        : " + pref.isVerbose());
+			System.out.println("Session        : " + (pref.getSession().getCookieSession() == null ? "aucune" : "mémorisée"));
+			System.out.println("Menu Explorer  : " + (ContextMenuInstaller.isInstalled() ? "installé" : "non installé"));
+			System.out.println();
+
+			boolean folderOk;
+			try {
+				folderOk = Files.isDirectory(Paths.get(pref.getNasFolder()));
+			} catch (final InvalidPathException e) {
+				folderOk = false;
+			}
+			System.out.println("Dossier photos : " + (folderOk ? "accessible" : "INACCESSIBLE"));
+
+			final SynoApiClient client = new SynoApiClient(pref);
+			client.login();
+			System.out.println("Connexion NAS  : OK");
+			if (checkGroups(client.getGroups(), pref.getGroups())) {
+				System.out.println("Groupes        : OK");
+			} else {
+				System.out.println("-> corriger avec 'synoRight groups add/remove' ou 'synoRight init'.");
+			}
+		}
+	}
+
+	@Command(name = "groups", description = "Liste les groupes gérés.", subcommands = { GroupsAdd.class, GroupsRemove.class })
+	static final class Groups extends AbstractCommand {
+		@Override
+		void execute() {
+			final Preferences pref = loadPrefs();
+			for (final Group grp : pref.getGroups()) {
+				System.out.println(grp.getName() + " (id " + grp.getId() + ")");
+			}
+		}
+	}
+
+	@Command(name = "add", description = "Ajoute des groupes, choisis parmi ceux du NAS.")
+	static final class GroupsAdd extends AbstractCommand {
+		@Override
+		void execute() {
+			final Preferences pref = loadPrefs();
+			final SynoApiClient client = new SynoApiClient(pref);
+			client.login();
+
+			final List<SynoGroup> candidates = client.getGroups().stream()
+					.filter(g -> pref.getGroupById(String.valueOf(g.gid())).isEmpty())
+					.sorted(Comparator.comparing(SynoGroup::name, String.CASE_INSENSITIVE_ORDER))
+					.toList();
+			if (candidates.isEmpty()) {
+				System.out.println("Tous les groupes du NAS sont déjà gérés.");
+				return;
+			}
+
+			final List<Group> groups = new ArrayList<>(pref.getGroups());
+			for (final int index : ConsoleUtil.promptChoices("Groupes à ajouter", candidates.stream().map(SynoGroup::name).toList())) {
+				final SynoGroup nasGroup = candidates.get(index);
+				groups.add(new Group(String.valueOf(nasGroup.gid()), nasGroup.name()));
+			}
+			pref.setGroups(groups);
+			pref.save();
+			System.out.println("Groupes gérés : " + describeGroups(pref.getGroups()));
+			refreshMenu(pref);
+		}
+	}
+
+	@Command(name = "remove", description = "Retire des groupes de la configuration (sans toucher aux droits ni aux fichiers existants).")
+	static final class GroupsRemove extends AbstractCommand {
+		@Override
+		void execute() {
+			final Preferences pref = loadPrefs();
+			final List<Group> current = pref.getGroups();
+
+			final List<Integer> toRemove = ConsoleUtil.promptChoices("Groupes à retirer", current.stream().map(Group::getName).toList());
+			final List<Group> groups = new ArrayList<>();
+			for (int i = 0; i < current.size(); i++) {
+				if (!toRemove.contains(i)) {
+					groups.add(current.get(i));
+				}
+			}
+			pref.setGroups(groups);
+			pref.save();
+			System.out.println("Groupes gérés : " + describeGroups(pref.getGroups()));
+			refreshMenu(pref);
+		}
+	}
+
+	@Command(name = "password", description = "Change le mot de passe mémorisé (vérifié auprès du NAS), ou l'oublie avec --forget.")
+	static final class Password extends AbstractCommand {
+		@Option(names = "--forget", description = "Oublie le mot de passe : il sera demandé à chaque connexion.")
+		boolean forget;
+
+		@Override
+		void execute() {
+			final Preferences pref = loadPrefs();
+			if (forget) {
+				pref.setPassword(null);
+				pref.save();
+				System.out.println("Mot de passe oublié.");
+				return;
+			}
+
+			final String[] password = { ConsoleUtil.promptSecret("Nouveau mot de passe de " + pref.getUser() + " :") };
+			// vrai login sur une session de travail pour vérifier le mot de passe (le device id évite l'OTP)
+			final Session workSession = pref.getSession().transientCopy(true);
+			new SynoApiClient(pref.getUrl(), pref.getUser(), password[0], false, workSession, newPassword -> password[0] = newPassword).login();
+
+			pref.getSession().replaceWith(workSession);
+			pref.setPassword(password[0]);
+			pref.save();
+			System.out.println("Mot de passe vérifié et mémorisé.");
+		}
+	}
+
+	@Command(name = "logout", description = "Oublie la session Synology mémorisée (le prochain login redemandera l'OTP).")
+	static final class Logout extends AbstractCommand {
+		@Override
+		void execute() {
+			Session.load(configDir()).clear();
+			System.out.println("Session oubliée.");
+		}
+	}
+
+	@Command(name = "menu", description = "Menu contextuel de l'Explorateur Windows.", subcommands = { MenuInstall.class, MenuUninstall.class })
+	static final class Menu extends AbstractCommand {
+		@Override
+		void execute() {
+			System.out.println("Menu contextuel : " + (ContextMenuInstaller.isInstalled() ? "installé" : "non installé")
+					+ ". Utiliser 'menu install' ou 'menu uninstall'.");
+		}
+	}
+
+	@Command(name = "install", description = "Installe (ou met à jour) le menu contextuel pour l'utilisateur courant.")
+	static final class MenuInstall extends AbstractCommand {
+		@Override
+		void execute() {
+			final Preferences pref = loadPrefs();
+			ContextMenuInstaller.install(pref.getGroups(), pref.getNasFolder(), pref.getConfigDir());
+		}
+	}
+
+	@Command(name = "uninstall", description = "Désinstalle le menu contextuel.")
+	static final class MenuUninstall extends AbstractCommand {
+		@Override
+		void execute() {
+			ContextMenuInstaller.uninstall();
+		}
+	}
+}

@@ -14,14 +14,17 @@ import sk.synoAdmin.engine.Group;
 
 class ContextMenuInstallerTest {
 
-	private static final Path JAVA_EXE = Paths.get("C:\\Java\\bin\\java.exe");
-	private static final Path JAR = Paths.get("D:\\apps\\synoRight.jar");
+	private static final List<String> JAR_LAUNCHER = List.of("C:\\Java\\bin\\java.exe", "-jar", "D:\\apps\\synoRight.jar");
 	private static final Path CONFIG = Paths.get("D:\\apps");
 
 	private static String buildContent() {
+		return buildContent(JAR_LAUNCHER);
+	}
+
+	private static String buildContent(final List<String> launcher) {
 		return ContextMenuInstaller.buildRegFileContent(
 				List.of(new Group("3", "famille"), new Group("5", "amis")),
-				"\\\\NAS\\photo", JAVA_EXE, JAR, CONFIG);
+				"\\\\NAS\\photo", launcher, CONFIG);
 	}
 
 	@Test
@@ -45,26 +48,37 @@ class ContextMenuInstallerTest {
 	}
 
 	@Test
+	void consultation_droitsDuDossierEtStatus() {
+		final String content = buildContent();
+
+		assertTrue(content.contains("\\shell\\01show]"));
+		assertTrue(content.contains("\"MUIVerb\"=\"Voir les droits de ce dossier\""));
+		assertTrue(content.contains(" show \\\"%V\\\"\""));
+		assertTrue(content.contains("\\shell\\02status]"));
+		assertTrue(content.contains(" status\""));
+	}
+
+	@Test
 	void actionsFull_presentesSansCible() {
 		final String content = buildContent();
 
-		assertTrue(content.contains("\\shell\\01dbToFs]"));
-		assertTrue(content.contains(" -a FULL_DB_TO_FS\""));
-		assertTrue(content.contains("\\shell\\02fsToDb]"));
-		assertTrue(content.contains(" -a FULL_FS_TO_DB\""));
+		assertTrue(content.contains("\\shell\\03dbToFs]"));
+		assertTrue(content.contains(" pull\""));
+		assertTrue(content.contains("\\shell\\04fsToDb]"));
+		assertTrue(content.contains(" push\""));
 	}
 
 	@Test
 	void actionsParGroupe_avecGroupeEtRepertoireCible() {
 		final String content = buildContent();
 
-		assertTrue(content.contains("\\shell\\03addfamille]"));
+		assertTrue(content.contains("\\shell\\05addfamille]"));
 		assertTrue(content.contains("\"MUIVerb\"=\"Ajouter famille\""));
-		assertTrue(content.contains(" -a ADD_GRP -g \\\"famille\\\" -d \\\"%V\\\"\""));
-		assertTrue(content.contains("\\shell\\04delfamille]"));
-		assertTrue(content.contains("\\shell\\05addamis]"));
-		assertTrue(content.contains("\\shell\\06delamis]"));
-		assertTrue(content.contains(" -a DEL_GRP -g \\\"amis\\\" -d \\\"%V\\\"\""));
+		assertTrue(content.contains(" grant \\\"famille\\\" \\\"%V\\\"\""));
+		assertTrue(content.contains("\\shell\\06delfamille]"));
+		assertTrue(content.contains("\\shell\\07addamis]"));
+		assertTrue(content.contains("\\shell\\08delamis]"));
+		assertTrue(content.contains(" revoke \\\"amis\\\" \\\"%V\\\"\""));
 	}
 
 	@Test
@@ -75,16 +89,24 @@ class ContextMenuInstallerTest {
 	}
 
 	@Test
-	void separateurs_surFsToDbEtEntreesDeSuppression() {
+	void commandes_lanceurExe() {
+		final String content = buildContent(List.of("C:\\Program Files\\synoRight\\synoRight.exe"));
+
+		assertTrue(content.contains("@=\"\\\"C:\\\\Program Files\\\\synoRight\\\\synoRight.exe\\\" -c \\\"D:\\\\apps\\\" pull\""));
+	}
+
+	@Test
+	void separateurs_apresStatusFsToDbEtEntreesDeSuppression() {
 		final String content = buildContent();
 
-		final int fsToDb = content.indexOf("02fsToDb]");
-		final int flagsAfterFsToDb = content.indexOf("\"CommandFlags\"=dword:00004140", fsToDb);
-		assertTrue(flagsAfterFsToDb > fsToDb);
+		final int status = content.indexOf("02status]");
+		assertTrue(content.indexOf("\"CommandFlags\"=dword:00004140", status) > status);
+		final int fsToDb = content.indexOf("04fsToDb]");
+		assertTrue(content.indexOf("\"CommandFlags\"=dword:00004140", fsToDb) > fsToDb);
 
 		// pas de flags sur les entrées d'ajout
-		final int addFamille = content.indexOf("03addfamille]");
-		final int delFamille = content.indexOf("04delfamille]");
+		final int addFamille = content.indexOf("05addfamille]");
+		final int delFamille = content.indexOf("06delfamille]");
 		assertFalse(content.substring(addFamille, delFamille).contains("CommandFlags"));
 	}
 

@@ -6,8 +6,19 @@ public final class LogUtil {
 	// activable avec -DsynoAdmin.debug=true
 	private static final boolean IS_DEBUG = Boolean.getBoolean("synoAdmin.debug");
 
+	// temps de traitement et stack traces : option -v ou verbose=true dans la configuration
+	private static volatile boolean verbose;
+
 	private LogUtil() {
 		// utility
+	}
+
+	public static boolean isVerbose() {
+		return verbose || IS_DEBUG;
+	}
+
+	public static void setVerbose(final boolean verbose) {
+		LogUtil.verbose = verbose;
 	}
 
 	public static void runMonitored(final Runnable fct, final String message) {
@@ -23,7 +34,9 @@ public final class LogUtil {
 		final T ret = fct.get();
 
 		final long end = System.nanoTime();
-		System.out.println(message + " : " + (end - start) / 1_000_000 + " ms");
+		if (isVerbose()) {
+			System.out.println(message + " : " + (end - start) / 1_000_000 + " ms");
+		}
 
 		return ret;
 	}

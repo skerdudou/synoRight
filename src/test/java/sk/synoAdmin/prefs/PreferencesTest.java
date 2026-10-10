@@ -1,6 +1,7 @@
 package sk.synoAdmin.prefs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -8,11 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.engine.Group;
 
 class PreferencesTest {
 
@@ -31,7 +34,7 @@ class PreferencesTest {
 	}
 
 	private Preferences readPrefs() {
-		return Preferences.fromFile(tempDir.toString());
+		return Preferences.fromFile(tempDir);
 	}
 
 	@Test
@@ -74,7 +77,7 @@ class PreferencesTest {
 	void fromFile_fichierAbsent_messageProposantInit() {
 		final UserException e = assertThrows(UserException.class, this::readPrefs);
 
-		assertTrue(e.getMessage().contains("INIT"));
+		assertTrue(e.getMessage().contains("init"));
 	}
 
 	@Test
@@ -117,38 +120,108 @@ class PreferencesTest {
 		assertTrue(pref.getGroupById("9").isEmpty());
 	}
 
+
 	@Test
-	void setCookieSession_persisteChiffreDansLeFichier() throws IOException {
+	void sessionUpdate_persisteChiffreeDansUnFichierSepare() throws IOException {
 		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
 
-		readPrefs().setCookieSession("abc123");
+		readPrefs().getSession().update("abc123", "tok", "did1");
 
 		final Preferences relu = readPrefs();
-		assertEquals("abc123", relu.getCookieSession());
-		// les autres propriétés ne sont pas perdues
-		assertEquals("admin", relu.getUser());
-		// et la valeur n'est pas en clair dans le fichier
-		assertEquals("v2\\:", configLineValue("cookieSession").substring(0, 4));
+		assertEquals("abc123", relu.getSession().getCookieSession());
+		assertEquals("did1", relu.getSession().getCookieDid());
+		// rien dans la configuration, chiffré dans le fichier de session
+		assertTrue(Files.readString(tempDir.resolve(Preferences.CONFIG_FILENAME)).indexOf("cookieSession") < 0);
+		assertTrue(lineValue(Session.FILENAME, "cookieSession").startsWith("v2\\:"));
 	}
 
 	@Test
-	void fromFile_sessionEnClair_migreVersChiffre() throws IOException {
-		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\ncookieSession=sid123\nsynoToken=tok456\n");
+	void sessionUpdate_sansDeviceId_conserveLePrecedent() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
+		readPrefs().getSession().update("s1", "t1", "did1");
 
-		final Preferences pref = readPrefs();
-		assertEquals("sid123", pref.getCookieSession());
-		assertEquals("tok456", pref.getSynoToken());
+		readPrefs().getSession().update("s2", "t2", null);
 
-		// le fichier a été réécrit chiffré, toujours lisible
-		assertEquals("v2\\:", configLineValue("cookieSession").substring(0, 4));
-		assertEquals("v2\\:", configLineValue("synoToken").substring(0, 4));
-		final Preferences relu = readPrefs();
-		assertEquals("sid123", relu.getCookieSession());
-		assertEquals("tok456", relu.getSynoToken());
+		assertEquals("did1", readPrefs().getSession().getCookieDid());
+		assertEquals("s2", readPrefs().getSession().getCookieSession());
 	}
 
-	private String configLineValue(final String key) throws IOException {
-		return Files.readAllLines(tempDir.resolve(Preferences.CONFIG_FILENAME)).stream()
+	@Test
+	void sessionClear_supprimeLeFichier() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
+		readPrefs().getSession().update("s1", "t1", "did1");
+
+		readPrefs().getSession().clear();
+
+		assertFalse(Files.exists(tempDir.resolve(Session.FILENAME)));
+		assertNull(readPrefs().getSession().getCookieDid());
+	}
+
+	@Test
+	void fromFile_sessionDansLaConfig_deplaceeDansLeFichierDeSession() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\ncookieSession=sid123\nsynoToken="
+				+ CryptoUtils.encrypt("tok456") + "\n");
+
+		final Preferences pref = readPrefs();
+		assertEquals("sid123", pref.getSession().getCookieSession());
+		assertEquals("tok456", pref.getSession().getSynoToken());
+
+		// la configuration ne contient plus la session, toujours lisible ensuite
+		final String config = Files.readString(tempDir.resolve(Preferences.CONFIG_FILENAME));
+		assertFalse(config.contains("cookieSession"));
+		assertFalse(config.contains("synoToken"));
+		assertTrue(config.contains("user=admin"));
+		final Preferences relu = readPrefs();
+		assertEquals("sid123", relu.getSession().getCookieSession());
+		assertEquals("tok456", relu.getSession().getSynoToken());
+	}
+
+	@Test
+	void verbose_luDansLaConfigEtEcritParSave() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\nverbose=true\n");
+
+		final Preferences pref = readPrefs();
+		assertTrue(pref.isVerbose());
+
+		pref.setGroups(List.of(new Group("5", "amis")));
+		pref.save();
+		final Preferences relu = readPrefs();
+		assertTrue(relu.isVerbose());
+		assertEquals("amis", relu.getGroups().get(0).getName());
+	}
+
+	@Test
+	void verbose_absent_faux() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
+
+		assertFalse(readPrefs().isVerbose());
+	}
+
+	@Test
+	void setPassword_nullOublieLeMotDePasse() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\npassword=" + CryptoUtils.encrypt("s3cret") + "\ngroups=3:famille\n");
+
+		final Preferences pref = readPrefs();
+		pref.setPassword(null);
+		pref.save();
+
+		assertNull(readPrefs().getPassword());
+	}
+
+	@Test
+	void setGroups_vide_exception() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
+
+		assertThrows(UserException.class, () -> readPrefs().setGroups(List.of()));
+	}
+
+	@Test
+	void resolveConfigDir_explicite() {
+		assertEquals(tempDir.toAbsolutePath().normalize(), Preferences.resolveConfigDir(tempDir));
+	}
+
+	private String lineValue(final String fileName, final String key) throws IOException {
+		return Files.readAllLines(tempDir.resolve(fileName)).stream()
 				.filter(l -> l.startsWith(key + "="))
 				.findAny().orElseThrow()
 				.substring(key.length() + 1);

@@ -92,7 +92,16 @@ class ContextMenuInstallerTest {
 	void commandes_lanceurExe() {
 		final String content = buildContent(List.of("C:\\Program Files\\synoRight\\synoRight.exe"));
 
-		assertTrue(content.contains("@=\"\\\"C:\\\\Program Files\\\\synoRight\\\\synoRight.exe\\\" -c \\\"D:\\\\apps\\\" pull\""));
+		assertTrue(content.contains("@=\"\\\"C:\\\\Program Files\\\\synoRight\\\\synoRight.exe\\\" -c \\\"D:\\\\apps\\\" --pause pull\""));
+	}
+
+	@Test
+	void commandes_pauseAvantFermetureDeLaFenetre() {
+		final String content = buildContent();
+
+		final long commands = content.lines().filter(l -> l.startsWith("@=")).count();
+		final long withPause = content.lines().filter(l -> l.startsWith("@=") && l.contains(" --pause ")).count();
+		assertEquals(commands, withPause);
 	}
 
 	@Test

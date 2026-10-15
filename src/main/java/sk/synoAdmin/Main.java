@@ -32,7 +32,10 @@ public class Main {
 			System.out.println("Total time : " + (System.nanoTime() - start) / 1_000_000 + " ms");
 		}
 
-		ConsoleUtil.pauseBeforeExit();
+		// pause seulement pour la fenêtre du menu contextuel (et pour les anciens menus, qui doivent afficher le message)
+		if (isLegacySyntax(args) || Arrays.asList(args).contains("--pause")) {
+			ConsoleUtil.pauseBeforeExit();
+		}
 
 		if (exitCode != 0) {
 			System.exit(exitCode);

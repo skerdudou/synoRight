@@ -32,6 +32,14 @@ class CliTest {
 	}
 
 	@Test
+	void pause_accepteeAvantLaSousCommande() {
+		final SynoRightCommand root = new SynoRightCommand();
+		parse(root, "-c", "D:\\conf", "--pause", "show", "D:\\photo\\a");
+
+		assertTrue(root.pause);
+	}
+
+	@Test
 	void grant_groupeEtDossier() {
 		final ParseResult result = parse(new SynoRightCommand(), "grant", "famille", "\\\\NAS\\photo\\2024");
 		final RightCommands.Grant grant = (RightCommands.Grant) result.subcommand().commandSpec().userObject();

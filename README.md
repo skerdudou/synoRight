@@ -74,4 +74,6 @@ Si le mot de passe mémorisé est refusé par le NAS, il est redemandé et peut 
 
 `synoRight menu install` (proposé à la fin d'`init`) installe un menu contextuel « Droits Synology Photos » (clic droit sur un dossier ou sur le fond d'un dossier ouvert) pour l'utilisateur courant — écrit sous `HKCU`, pas besoin de droits administrateur. Il propose : voir les droits du dossier, état de la synchro, les deux synchros complètes, et l'ajout/suppression de chaque groupe configuré.
 
+La fenêtre ouverte par le menu attend Entrée avant de se fermer (option `--pause`, ajoutée par le menu ; sans elle, l'outil rend la main directement).
+
 Les commandes générées pointent vers `synoRight.exe` (ou java + jar) à son emplacement courant : relancer `menu install` après un déplacement. `groups add/remove` met le menu à jour automatiquement. Un menu installé par une ancienne version (syntaxe `-a ACTION`) affiche un message invitant à le réinstaller.

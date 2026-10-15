@@ -40,6 +40,11 @@ public class SynoRightCommand implements Callable<Integer> {
 			description = "Affiche les temps de traitement et le détail des erreurs (aussi activable par verbose=true dans la configuration).")
 	boolean verbose;
 
+	// lue par Main : pause avant fermeture de la fenêtre ouverte par le menu contextuel
+	@Option(names = "--pause", scope = ScopeType.INHERIT, hidden = true,
+			description = "Attend Entrée avant de rendre la main (fenêtre ouverte par le menu contextuel).")
+	boolean pause;
+
 	@Spec
 	CommandSpec spec;
 

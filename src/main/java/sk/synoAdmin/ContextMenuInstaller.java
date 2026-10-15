@@ -109,7 +109,7 @@ public final class ContextMenuInstaller {
 		final String baseCmd = launcher.stream()
 				.map(arg -> arg.startsWith("-") ? arg : quote(arg))
 				.collect(Collectors.joining(" "))
-				+ " -c " + quote(configFolder.toString());
+				+ " -c " + quote(configFolder.toString()) + " --pause";
 		final String target = " " + quote("%V");
 
 		int index = 1;

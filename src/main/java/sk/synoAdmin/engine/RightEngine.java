@@ -24,7 +24,7 @@ import sk.synoAdmin.synology.SynoFolderPermission;
 
 public class RightEngine {
 
-	// profondeur d'arborescence gérée (albums de niveau 1 et 2, comme getAccessRight côté API)
+	// profondeur d'arborescence gérée : Synology Photos ne gère les droits que sur les dossiers de niveau 1 et 2
 	private static final int MAX_DEPTH = 2;
 
 	private final Preferences pref;
@@ -348,7 +348,12 @@ public class RightEngine {
 			throw new UserException("Répertoire non pris en charge, il doit être contenu dans '" + pref.getNasFolder() + "'");
 		}
 
-		return nasPath.relativize(folderPath);
+		final Path relativePath = nasPath.relativize(folderPath);
+		if (relativePath.getNameCount() > MAX_DEPTH) {
+			throw new UserException("Synology Photos ne gère les droits que sur les " + MAX_DEPTH
+					+ " premiers niveaux de dossiers sous '" + pref.getNasFolder() + "'.");
+		}
+		return relativePath;
 	}
 
 	private Folder resolveFolder(final String folder) {

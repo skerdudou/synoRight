@@ -60,6 +60,8 @@ password=v2:...
 groups=3:famille;5:amis
 # temps de traitement et détail des erreurs
 verbose=false
+# optionnel : empreinte SHA-256 du certificat auto-signé du NAS à accepter (proposé par init)
+certFingerprint=AB:CD:...
 ```
 
 Les commandes qui modifient la configuration (`init`, `groups`, `password`, migrations) réécrivent le fichier : les commentaires ajoutés à la main ne sont pas conservés.
@@ -69,6 +71,8 @@ La session Synology (`cookieSession`, `synoToken`, `cookieDid`) est mémorisée 
 Le mot de passe et la session sont chiffrés en AES-GCM avec une clé aléatoire propre au poste, stockée dans `~/.synoRight/key` (accès restreint au propriétaire). Si la clé est absente ou perdue, le mot de passe est simplement redemandé à la connexion (et la session recréée) ; pour utiliser la même configuration sur un autre poste, copier aussi le fichier de clé.
 
 Si le mot de passe mémorisé est refusé par le NAS, il est redemandé et peut être mémorisé à la place.
+
+**Certificat auto-signé** : si DSM présente un certificat non reconnu (certificat par défaut, auto-signé), `init` l'affiche avec son empreinte SHA-256 et propose de lui faire confiance. Seul ce certificat précis est alors accepté, en plus de la validation standard ; s'il change (renouvellement), la connexion échoue à nouveau : relancer `init`.
 
 ## Intégration Explorateur Windows
 

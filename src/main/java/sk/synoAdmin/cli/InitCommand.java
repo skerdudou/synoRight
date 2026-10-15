@@ -4,8 +4,12 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.cert.X509Certificate;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+
+import javax.net.ssl.SSLHandshakeException;
 
 import picocli.CommandLine.Command;
 import sk.synoAdmin.ConsoleUtil;
@@ -16,6 +20,7 @@ import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
 import sk.synoAdmin.synology.SynoApiClient;
 import sk.synoAdmin.synology.SynoGroup;
+import sk.synoAdmin.synology.TrustedCertificate;
 
 /**
  * Assistant de configuration : connexion au NAS (validée avant d'aller plus loin),
@@ -43,6 +48,7 @@ final class InitCommand extends AbstractCommand {
 		String url = existing == null ? null : existing.getUrl();
 		String user = existing == null ? null : existing.getUser();
 		final String[] password = new String[1];
+		String fingerprint = existing == null ? null : existing.getCertFingerprint();
 		SynoApiClient client;
 		while (true) {
 			url = normalizeUrl(ConsoleUtil.promptLine("URL de DSM (ex : https://nas.example.com:5001) :", url));
@@ -65,17 +71,30 @@ final class InitCommand extends AbstractCommand {
 			// même compte : le device id évite de redemander l'OTP
 			workSession = session.transientCopy(sameAccount);
 
-			// mot de passe corrigé pendant le login : c'est lui qui sera mémorisé
-			client = new SynoApiClient(url, user, password[0], keepPassword, workSession, newPassword -> password[0] = newPassword);
-			try {
-				client.login();
+			boolean connected = false;
+			while (true) {
+				// mot de passe corrigé pendant le login : c'est lui qui sera mémorisé
+				client = new SynoApiClient(url, user, password[0], keepPassword, workSession, fingerprint, newPassword -> password[0] = newPassword);
+				try {
+					client.login();
+					connected = true;
+				} catch (final UserException e) {
+					// certificat auto-signé : proposer de lui faire confiance, puis réessayer avec les mêmes identifiants
+					final String trusted = isCertificateError(e) ? promptTrustCertificate(url, fingerprint) : null;
+					if (trusted != null) {
+						fingerprint = trusted;
+						continue;
+					}
+					System.out.println(e.getMessage());
+				}
+				break;
+			}
+			if (connected) {
 				System.out.println("Connexion OK.");
 				break;
-			} catch (final UserException e) {
-				System.out.println(e.getMessage());
-				if (!ConsoleUtil.promptBool("Réessayer ?")) {
-					throw new UserException("Configuration abandonnée, rien n'a été enregistré.");
-				}
+			}
+			if (!ConsoleUtil.promptBool("Réessayer ?")) {
+				throw new UserException("Configuration abandonnée, rien n'a été enregistré.");
 			}
 		}
 
@@ -91,6 +110,7 @@ final class InitCommand extends AbstractCommand {
 
 		session.replaceWith(workSession);
 		final Preferences pref = new Preferences(dir, folder, url, user, storePassword ? password[0] : null, groups, existing != null && existing.isVerbose());
+		pref.setCertFingerprint(fingerprint);
 		pref.save();
 		System.out.println("Configuration enregistrée : " + dir.resolve(Preferences.CONFIG_FILENAME));
 
@@ -106,6 +126,43 @@ final class InitCommand extends AbstractCommand {
 
 		System.out.println();
 		System.out.println("Terminé. Pour commencer : 'synoRight status' affiche l'état des droits, 'synoRight --help' liste les commandes.");
+	}
+
+	static boolean isCertificateError(final Throwable e) {
+		for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+			if (cause instanceof SSLHandshakeException) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Affiche le certificat présenté par le NAS et demande si on lui fait confiance.
+	 *
+	 * @return son empreinte si l'utilisateur l'accepte, null sinon
+	 */
+	private static String promptTrustCertificate(final String url, final String currentFingerprint) {
+		final X509Certificate certificate;
+		try {
+			certificate = TrustedCertificate.fetchServerCertificate(url);
+		} catch (final UserException e) {
+			System.out.println(e.getMessage());
+			return null;
+		}
+		final String fingerprint = TrustedCertificate.fingerprint(certificate);
+		if (fingerprint.equalsIgnoreCase(currentFingerprint)) {
+			// déjà accepté : l'échec a une autre cause
+			return null;
+		}
+
+		System.out.println("Le certificat HTTPS du NAS n'est pas reconnu (certificat auto-signé ?) :");
+		System.out.println("  Sujet          : " + certificate.getSubjectX500Principal().getName());
+		System.out.println("  Émetteur       : " + certificate.getIssuerX500Principal().getName());
+		System.out.println("  Valide jusqu'au: " + certificate.getNotAfter().toInstant().atZone(ZoneId.systemDefault()).toLocalDate());
+		System.out.println("  SHA-256        : " + fingerprint);
+		System.out.println("Vérifier cette empreinte (navigateur : cadenas > certificat) avant de l'accepter.");
+		return ConsoleUtil.promptBool("Faire confiance à ce certificat ?") ? fingerprint : null;
 	}
 
 	private static Preferences loadExisting(final Path dir) {

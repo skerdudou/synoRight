@@ -10,11 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.net.ssl.SSLContext;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsServer;
 
 /**
  * Faux DSM pour les tests : login toujours accepté, albums Synology Photos et
@@ -33,13 +37,26 @@ public final class FakeDsm implements AutoCloseable {
 	private final HttpServer server;
 
 	public FakeDsm() throws IOException {
-		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		this(null);
+	}
+
+	/**
+	 * @param tls contexte TLS du serveur (certificat présenté), null pour du HTTP simple
+	 */
+	public FakeDsm(final SSLContext tls) throws IOException {
+		if (tls == null) {
+			server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+		} else {
+			final HttpsServer httpsServer = HttpsServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+			httpsServer.setHttpsConfigurator(new HttpsConfigurator(tls));
+			server = httpsServer;
+		}
 		server.createContext("/", this::handle);
 		server.start();
 	}
 
 	public String url() {
-		return "http://127.0.0.1:" + server.getAddress().getPort();
+		return (server instanceof HttpsServer ? "https" : "http") + "://127.0.0.1:" + server.getAddress().getPort();
 	}
 
 	/**

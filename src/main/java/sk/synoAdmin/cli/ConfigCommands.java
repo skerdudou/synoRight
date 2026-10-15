@@ -81,6 +81,8 @@ final class ConfigCommands {
 			System.out.println("Compte         : " + pref.getUser());
 			System.out.println("Mot de passe   : " + (pref.getPassword() == null ? "non mémorisé (demandé à chaque connexion)" : "mémorisé (chiffré)"));
 			System.out.println("Groupes        : " + describeGroups(pref.getGroups()));
+			System.out.println("Certificat     : " + (pref.getCertFingerprint() == null
+					? "validation standard" : "auto-signé accepté (SHA-256 " + pref.getCertFingerprint() + ")"));
 			System.out.println("Verbose        : " + pref.isVerbose());
 			System.out.println("Session        : " + (pref.getSession().getCookieSession() == null ? "aucune" : "mémorisée"));
 			System.out.println("Menu Explorer  : " + (ContextMenuInstaller.isInstalled() ? "installé" : "non installé"));
@@ -184,7 +186,8 @@ final class ConfigCommands {
 			final String[] password = { ConsoleUtil.promptSecret("Nouveau mot de passe de " + pref.getUser() + " :") };
 			// vrai login sur une session de travail pour vérifier le mot de passe (le device id évite l'OTP)
 			final Session workSession = pref.getSession().transientCopy(true);
-			new SynoApiClient(pref.getUrl(), pref.getUser(), password[0], false, workSession, newPassword -> password[0] = newPassword).login();
+			new SynoApiClient(pref.getUrl(), pref.getUser(), password[0], false, workSession, pref.getCertFingerprint(),
+					newPassword -> password[0] = newPassword).login();
 
 			pref.getSession().replaceWith(workSession);
 			pref.setPassword(password[0]);

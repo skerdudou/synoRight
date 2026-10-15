@@ -27,6 +27,8 @@ public class Preferences {
 	private List<Group> groups;
 	private final boolean verbose;
 	private final Session session;
+	// empreinte SHA-256 d'un certificat auto-signé du NAS à accepter (null : validation standard)
+	private String certFingerprint;
 
 	public Preferences(final Path configDir, final String nasFolder, final String url, final String user, final String password, final List<Group> groups, final boolean verbose) {
 		this(configDir, nasFolder, url, user, password, groups, verbose, Session.load(configDir));
@@ -108,6 +110,8 @@ public class Preferences {
 
 		final Session session = Session.load(configDir);
 		final Preferences preferences = new Preferences(configDir, folder, url, user, password, groups, verbose, session);
+		final String fingerprint = prop.getProperty("certFingerprint");
+		preferences.certFingerprint = fingerprint == null || fingerprint.isBlank() ? null : fingerprint.trim();
 
 		// migration de la session historiquement stockée dans la configuration
 		final boolean sessionInConfig = session.importFromConfig(prop);
@@ -170,6 +174,9 @@ public class Preferences {
 				.map(g -> g.getId() + ":" + g.getName())
 				.collect(Collectors.joining(";")));
 		prop.setProperty("verbose", String.valueOf(verbose));
+		if (certFingerprint != null) {
+			prop.setProperty("certFingerprint", certFingerprint);
+		}
 
 		try {
 			PropertiesFiles.store(configDir.resolve(CONFIG_FILENAME), prop,
@@ -218,6 +225,17 @@ public class Preferences {
 			throw new UserException("Au moins un groupe doit être configuré.");
 		}
 		this.groups = List.copyOf(groups);
+	}
+
+	public String getCertFingerprint() {
+		return certFingerprint;
+	}
+
+	/**
+	 * Change le certificat auto-signé accepté (null : aucun) ; appeler save() pour persister.
+	 */
+	public void setCertFingerprint(final String certFingerprint) {
+		this.certFingerprint = certFingerprint;
 	}
 
 	public boolean isVerbose() {

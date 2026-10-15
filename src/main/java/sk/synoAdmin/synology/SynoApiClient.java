@@ -60,7 +60,7 @@ public class SynoApiClient {
 	 * en remplacement peut être mémorisé à la place.
 	 */
 	public SynoApiClient(final Preferences pref) {
-		this(pref.getUrl(), pref.getUser(), pref.getPassword(), true, pref.getSession(), newPassword -> {
+		this(pref.getUrl(), pref.getUser(), pref.getPassword(), true, pref.getSession(), pref.getCertFingerprint(), newPassword -> {
 			if (ConsoleUtil.promptBool("Mémoriser ce nouveau mot de passe ?")) {
 				pref.setPassword(newPassword);
 				pref.save();
@@ -75,6 +75,13 @@ public class SynoApiClient {
 	 * @param onPasswordCorrected appelé avec le mot de passe ressaisi quand le premier a été refusé puis corrigé (peut être null)
 	 */
 	public SynoApiClient(final String url, final String user, final String password, final boolean passwordFromConfig, final Session session, final Consumer<String> onPasswordCorrected) {
+		this(url, user, password, passwordFromConfig, session, null, onPasswordCorrected);
+	}
+
+	/**
+	 * @param certFingerprint empreinte SHA-256 d'un certificat auto-signé à accepter (null : validation standard seule)
+	 */
+	public SynoApiClient(final String url, final String user, final String password, final boolean passwordFromConfig, final Session session, final String certFingerprint, final Consumer<String> onPasswordCorrected) {
 		this.url = url;
 		this.user = user;
 		initialPassword = password;
@@ -85,6 +92,7 @@ public class SynoApiClient {
 				.connectTimeout(Duration.ofSeconds(10))
 				// suit les redirections (comportement du client Jersey d'origine)
 				.followRedirects(HttpClient.Redirect.NORMAL)
+				.sslContext(TrustedCertificate.sslContext(certFingerprint))
 				.build();
 	}
 
@@ -393,7 +401,8 @@ public class SynoApiClient {
 				return "nom d'hôte introuvable, vérifier l'URL.";
 			}
 			if (cause instanceof SSLException) {
-				return "connexion HTTPS refusée (certificat non reconnu ?) : " + cause.getMessage();
+				return "connexion HTTPS refusée (certificat non reconnu ?) : " + cause.getMessage()
+						+ ". Certificat auto-signé : relancer 'synoRight init' pour lui faire confiance.";
 			}
 			if (cause instanceof HttpTimeoutException) {
 				return "le NAS ne répond pas (délai dépassé).";

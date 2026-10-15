@@ -48,7 +48,7 @@ Options communes : `-c` répertoire de configuration, `-v` mode verbeux (temps d
 
 ## Configuration
 
-Par défaut dans `~/.synoRight/` (à défaut, une configuration présente dans le répertoire courant est utilisée ; `-c` pour un autre répertoire). Fichier `config.synoRight.properties`, éditable à la main :
+Par défaut dans `~/.synoRight/` (à défaut, une configuration présente dans le répertoire courant est utilisée ; `-c` pour un autre répertoire). Fichier `config.synoRight.properties`, éditable à la main (UTF-8, accents acceptés) :
 
 ```properties
 folder=\\\\NAS\\photo

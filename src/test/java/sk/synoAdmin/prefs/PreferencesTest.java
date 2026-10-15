@@ -216,6 +216,36 @@ class PreferencesTest {
 	}
 
 	@Test
+	void fromFile_accentsEditesALaMainEnUtf8() throws IOException {
+		writeConfig("folder=\\\\\\\\NAS\\\\photo\\\\Été\nurl=u\nuser=admin\ngroups=3:Famille élargie\n");
+
+		final Preferences pref = readPrefs();
+
+		assertEquals("\\\\NAS\\photo\\Été", pref.getNasFolder());
+		assertEquals("Famille élargie", pref.getGroups().get(0).getName());
+	}
+
+	@Test
+	void fromFile_accentsAncienFichierIso88591() throws IOException {
+		Files.write(tempDir.resolve(Preferences.CONFIG_FILENAME),
+				"folder=f\nurl=u\nuser=admin\ngroups=3:Famille élargie\n".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+
+		assertEquals("Famille élargie", readPrefs().getGroups().get(0).getName());
+	}
+
+	@Test
+	void save_ecritLesAccentsEnUtf8Lisible() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
+		final Preferences pref = readPrefs();
+
+		pref.setGroups(List.of(new Group("3", "Famille élargie")));
+		pref.save();
+
+		assertTrue(Files.readString(tempDir.resolve(Preferences.CONFIG_FILENAME)).contains("Famille élargie"));
+		assertEquals("Famille élargie", readPrefs().getGroups().get(0).getName());
+	}
+
+	@Test
 	void resolveConfigDir_explicite() {
 		assertEquals(tempDir.toAbsolutePath().normalize(), Preferences.resolveConfigDir(tempDir));
 	}

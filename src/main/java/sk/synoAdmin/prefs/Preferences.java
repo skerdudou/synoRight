@@ -1,8 +1,6 @@
 package sk.synoAdmin.prefs;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -85,9 +83,9 @@ public class Preferences {
 					+ ". Lancer 'synoRight init' pour le créer (ou indiquer son répertoire avec -c).");
 		}
 
-		final Properties prop = new Properties();
-		try (InputStream input = Files.newInputStream(configFile)) {
-			prop.load(input);
+		final Properties prop;
+		try {
+			prop = PropertiesFiles.load(configFile);
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible de lire les préférences", e);
 		}
@@ -174,10 +172,8 @@ public class Preferences {
 		prop.setProperty("verbose", String.valueOf(verbose));
 
 		try {
-			Files.createDirectories(configDir);
-			try (OutputStream output = Files.newOutputStream(configDir.resolve(CONFIG_FILENAME))) {
-				prop.store(output, "Configuration synoRight (groups=id:nom;id:nom, verbose=true pour les temps de traitement)");
-			}
+			PropertiesFiles.store(configDir.resolve(CONFIG_FILENAME), prop,
+					"Configuration synoRight (groups=id:nom;id:nom, verbose=true pour les temps de traitement)");
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire les préférences", e);
 		}

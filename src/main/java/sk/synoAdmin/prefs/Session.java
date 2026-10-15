@@ -1,8 +1,6 @@
 package sk.synoAdmin.prefs;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
@@ -38,9 +36,9 @@ public final class Session {
 			return session;
 		}
 
-		final Properties prop = new Properties();
-		try (InputStream input = Files.newInputStream(session.file)) {
-			prop.load(input);
+		final Properties prop;
+		try {
+			prop = PropertiesFiles.load(session.file);
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible de lire la session " + session.file, e);
 		}
@@ -165,10 +163,7 @@ public final class Session {
 		putProtected(prop, KEY_DID, cookieDid);
 
 		try {
-			Files.createDirectories(file.getParent());
-			try (OutputStream output = Files.newOutputStream(file)) {
-				prop.store(output, "Session Synology Photos (chiffree, propre a ce poste)");
-			}
+			PropertiesFiles.store(file, prop, "Session Synology Photos (chiffrée, propre à ce poste)");
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire la session " + file, e);
 		}

@@ -59,7 +59,7 @@ jobs:
           if ($env:PFX_BASE64 -and $env:PFX_PASSWORD) {
             New-Item -ItemType Directory -Force $dir | Out-Null
             [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_BASE64))
-            [IO.File]::AppendAllText($env:GITHUB_ENV, "SYNORIGHT_SIGN_PASSWORD=$env:PFX_PASSWORD`n")
+            # le mot de passe n'est transmis qu'à l'étape de build (env de l'étape)
             [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "ephemeral=false`n")
           } else {
             Write-Host '::warning::No signing certificate secrets: the Windows 11 menu package is signed with an ephemeral certificate.'

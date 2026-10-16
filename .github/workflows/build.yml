@@ -68,7 +68,10 @@ jobs:
           }
           [IO.File]::AppendAllText($env:GITHUB_ENV, "SYNORIGHT_SIGN_PFX=$pfx`n")
 
+      # Windows PowerShell : Maven lance build.ps1 avec powershell.exe (5.1) ; lancé depuis pwsh, le PSModulePath
+      # de PowerShell 7 empêche 5.1 de charger ConvertTo-SecureString (Microsoft.PowerShell.Security)
       - name: Build application
+        shell: powershell
         env:
           # empty without secret: build.ps1 then reads the DPAPI password file next to the ephemeral pfx
           SYNORIGHT_SIGN_PASSWORD: ${{ secrets.SYNORIGHT_SIGN_PASSWORD }}

@@ -13,7 +13,6 @@ import javax.net.ssl.SSLHandshakeException;
 
 import picocli.CommandLine.Command;
 import sk.synoAdmin.ConsoleUtil;
-import sk.synoAdmin.ContextMenuInstaller;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.prefs.Preferences;
@@ -118,7 +117,7 @@ final class InitCommand extends AbstractCommand {
 		if (System.getProperty("os.name", "").toLowerCase().startsWith("windows")
 				&& ConsoleUtil.promptBool("Installer (ou mettre à jour) le menu contextuel de l'Explorateur ?")) {
 			try {
-				ContextMenuInstaller.install(pref.getGroups(), pref.getNasFolder(), dir);
+				ConfigCommands.installMenu(pref, dir);
 			} catch (final UserException e) {
 				System.out.println("Menu non installé : " + e.getMessage());
 			}

@@ -2,6 +2,7 @@ package sk.synoAdmin.cli;
 
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -12,9 +13,10 @@ import java.util.stream.Collectors;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import sk.synoAdmin.ConsoleUtil;
-import sk.synoAdmin.ContextMenuInstaller;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.menu.ClassicMenuInstaller;
+import sk.synoAdmin.menu.MenuDefinition;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
 import sk.synoAdmin.synology.SynoApiClient;
@@ -57,13 +59,19 @@ final class ConfigCommands {
 		return ok;
 	}
 
+	// provisoire : remplacé par MenuService
+	static void installMenu(final Preferences pref, final Path dir) {
+		ClassicMenuInstaller.install(MenuDefinition.build(pref.getMenuEntries(), pref.getGroups()), pref.getNasFolder(), dir);
+		System.out.println("Menu contextuel installé pour l'utilisateur courant.");
+	}
+
 	// les entrées de groupes du menu contextuel suivent la configuration
 	private static void refreshMenu(final Preferences pref) {
-		if (!ContextMenuInstaller.isInstalled()) {
+		if (!ClassicMenuInstaller.isInstalled()) {
 			return;
 		}
 		try {
-			ContextMenuInstaller.install(pref.getGroups(), pref.getNasFolder(), pref.getConfigDir());
+			installMenu(pref, pref.getConfigDir());
 		} catch (final UserException e) {
 			System.out.println("Menu contextuel non mis à jour (" + e.getMessage() + ") : relancer 'synoRight menu install'.");
 		}
@@ -85,7 +93,7 @@ final class ConfigCommands {
 					? "validation standard" : "auto-signé accepté (SHA-256 " + pref.getCertFingerprint() + ")"));
 			System.out.println("Verbose        : " + pref.isVerbose());
 			System.out.println("Session        : " + (pref.getSession().getCookieSession() == null ? "aucune" : "mémorisée"));
-			System.out.println("Menu Explorer  : " + (ContextMenuInstaller.isInstalled() ? "installé" : "non installé"));
+			System.out.println("Menu Explorer  : " + (ClassicMenuInstaller.isInstalled() ? "installé" : "non installé"));
 			System.out.println();
 
 			boolean folderOk;
@@ -209,7 +217,7 @@ final class ConfigCommands {
 	static final class Menu extends AbstractCommand {
 		@Override
 		void execute() {
-			System.out.println("Menu contextuel : " + (ContextMenuInstaller.isInstalled() ? "installé" : "non installé")
+			System.out.println("Menu contextuel : " + (ClassicMenuInstaller.isInstalled() ? "installé" : "non installé")
 					+ ". Utiliser 'menu install' ou 'menu uninstall'.");
 		}
 	}
@@ -219,7 +227,7 @@ final class ConfigCommands {
 		@Override
 		void execute() {
 			final Preferences pref = loadPrefs();
-			ContextMenuInstaller.install(pref.getGroups(), pref.getNasFolder(), pref.getConfigDir());
+			installMenu(pref, pref.getConfigDir());
 		}
 	}
 
@@ -227,7 +235,8 @@ final class ConfigCommands {
 	static final class MenuUninstall extends AbstractCommand {
 		@Override
 		void execute() {
-			ContextMenuInstaller.uninstall();
+			ClassicMenuInstaller.uninstall();
+			System.out.println("Menu contextuel désinstallé.");
 		}
 	}
 }

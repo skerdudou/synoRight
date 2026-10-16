@@ -121,6 +121,8 @@ final class ConfigWindow {
 	private final JPanel cardPanel = new JPanel(cards);
 	private final Deque<Runnable> pending = new ArrayDeque<>();
 	private boolean busy;
+	/** Avis de changement de langue (précédé d'un retour à la ligne) à joindre au message de l'installation du menu, "" sinon. */
+	private String restartNotice = "";
 
 	private ConfigForm form;
 	/** Configuration enregistrée (null tant qu'il n'y en a pas) ; lue hors de l'EDT par la synchronisation. */
@@ -815,7 +817,7 @@ final class ConfigWindow {
 			return new Installed(message, MenuService.status());
 		}, result -> {
 			showMenuStatus(result.status());
-			JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.doneWith", result.message()), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.doneWith", result.message()) + restartNotice, Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 		}, this::reloadMenuStatus));
 	}
 
@@ -889,16 +891,16 @@ final class ConfigWindow {
 			refreshPasswordHint();
 			refreshConnectionStatus();
 			updateSections();
+			final String restart = languageChanged ? "\n" + Messages.get("gui.config.language.restart") : "";
 			if (then != null) {
+				// l'installation du menu affiche son propre message, qui reprend l'avis de changement de langue
+				restartNotice = restart;
 				then.accept(result.pref());
 			} else if (result.menuError() != null) {
-				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.menuError", result.menuError()),
+				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.menuError", result.menuError()) + restart,
 						Gui.TITLE, JOptionPane.WARNING_MESSAGE);
 			} else {
-				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.done"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
-			}
-			if (languageChanged) {
-				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.language.restart"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.done") + restart, Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 			}
 		}, () -> {
 			// erreur déjà affichée, rien n'a changé dans le formulaire

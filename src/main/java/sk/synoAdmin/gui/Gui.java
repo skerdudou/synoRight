@@ -14,6 +14,7 @@ import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.CancellationException;
@@ -24,6 +25,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -31,6 +33,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.UIManager;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
@@ -64,7 +67,15 @@ public final class Gui {
 		} else {
 			FlatLightLaf.setup();
 		}
+		applyLocale(Messages.language().locale());
 		ConsoleUtil.setInteraction(new SwingInteraction());
+	}
+
+	/** Textes standard de Swing (Oui/Non, sélecteur de fichiers) dans la langue choisie ; formats de nombres et dates inchangés. */
+	static void applyLocale(final Locale locale) {
+		Locale.setDefault(Locale.Category.DISPLAY, locale);
+		JComponent.setDefaultLocale(locale);
+		UIManager.getDefaults().setDefaultLocale(locale);
 	}
 
 	private static boolean windowsDarkTheme() {

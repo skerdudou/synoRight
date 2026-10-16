@@ -71,19 +71,23 @@ url=https://nas.example.com:5001
 user=admin
 # mot de passe chiffré (écrit par init / password), optionnel : demandé en console sinon
 password=v2:...
-# id:nom;id:nom (ids des groupes du NAS)
-groups=3:famille;5:amis
+# id:nom;id:nom : id (gid) du groupe sur le NAS et nom court, libre (nom des fichiers @<nom>.synoRight et des entrées du menu)
+groups=65536:Kerdudou;65537:Godmez
 # temps de traitement et détail des erreurs
 verbose=false
 # optionnel : empreinte SHA-256 du certificat auto-signé du NAS à accepter (proposé par init)
 certFingerprint=AB:CD:...
-# optionnel : entrées du menu de l'Explorateur (rights, open, status, push, pull, groups, config) ; valeur par défaut : rights,status,push,config
-menuEntries=rights,status,push,config
+# optionnel : entrées de chaque menu de l'Explorateur (rights, open, status, push, pull, groups, config) ; valeur par défaut : rights,status,push,config
+# (l'ancienne clé commune menuEntries reste lue pour les deux menus)
+menuEntries.modern=rights,status,push,config
+menuEntries.classic=rights,status,push,pull,groups,config
 # optionnel : modern, classic ou all (absent = Windows 11 si disponible, sinon classique)
 menuTarget=modern
 ```
 
 L'entrée `open` ouvre l'album du dossier dans Synology Photos ; elle est désactivée par défaut.
+
+Le nom court d'un groupe peut différer de son nom sur le NAS (ex : `Kerdudou` pour le groupe « Famille Kerdudou ») : seul l'id le relie au NAS. Il se modifie dans la section Groupes de la fenêtre de configuration ; le changer pour un groupe déjà géré change le nom des fichiers attendus (les anciens `@<nom>.synoRight` ne sont plus pris en compte, « Photos → fichiers » recrée les nouveaux).
 
 Les commandes qui modifient la configuration (`init`, `groups`, `password`, migrations) réécrivent le fichier : les commentaires ajoutés à la main ne sont pas conservés.
 
@@ -103,6 +107,8 @@ Le menu contextuel « Droits Synology Photos » (clic droit sur un dossier ou su
 - **Classique** : le menu est sous « Afficher plus d'options », écrit sous `HKCU` (pas de droits administrateur).
 - Sans choix, Windows 11 est utilisé s'il est disponible, sinon le menu classique (`menuTarget`).
 
-Les entrées sont au choix (`menuEntries`) : droits du dossier, ouvrir dans Synology Photos, état de la synchro, les deux synchros complètes, ajout/retrait de chaque groupe configuré, configuration de synoRight. Les changements de groupes ou d'entrées sont pris en compte **sans réinstaller** (`groups add/remove` et la fenêtre de configuration mettent le menu à jour).
+Les entrées sont au choix, **séparément pour chaque menu** (`menuEntries.modern`, `menuEntries.classic`) : droits du dossier, ouvrir dans Synology Photos, état de la synchro, les deux synchros complètes, ajout/retrait de chaque groupe configuré, configuration de synoRight. Les changements de groupes ou d'entrées sont pris en compte **sans réinstaller** (`groups add/remove` et la fenêtre de configuration mettent le menu à jour).
+
+Le menu Windows 11 n'affiche pas de séparateurs entre les blocs d'entrées : c'est une limite du menu principal de Windows 11 pour les sous-menus des extensions (les séparateurs restent visibles dans le menu classique).
 
 Le menu lance `synoRightGui.exe` : plus de fenêtre console depuis le menu. Les commandes générées pointent vers l'application à son emplacement courant : relancer l'installation du menu après un déplacement. Un menu installé par une ancienne version (syntaxe `-a ACTION`) affiche un message invitant à le réinstaller.

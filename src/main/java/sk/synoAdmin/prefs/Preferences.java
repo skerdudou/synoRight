@@ -32,8 +32,9 @@ public class Preferences {
 	private final Session session;
 	// empreinte SHA-256 d'un certificat auto-signé du NAS à accepter (null : validation standard)
 	private String certFingerprint;
-	// entrées du menu contextuel de l'Explorateur
-	private List<MenuEntry> menuEntries = MenuEntry.defaults();
+	// entrées du menu contextuel de l'Explorateur, propres à chaque menu
+	private List<MenuEntry> modernMenuEntries = MenuEntry.defaults();
+	private List<MenuEntry> classicMenuEntries = MenuEntry.defaults();
 	// menu(s) à installer (null : automatique selon la version de Windows)
 	private MenuTarget menuTarget;
 
@@ -119,14 +120,15 @@ public class Preferences {
 		final Preferences preferences = new Preferences(configDir, folder, url, user, password, groups, verbose, session);
 		final String fingerprint = prop.getProperty("certFingerprint");
 		preferences.certFingerprint = fingerprint == null || fingerprint.isBlank() ? null : fingerprint.trim();
-		final String entries = prop.getProperty("menuEntries");
-		if (entries != null) {
-			preferences.menuEntries = Arrays.stream(entries.split(","))
-					.filter(s -> !s.isBlank())
-					.map(MenuEntry::fromId)
-					.flatMap(Optional::stream)
-					.distinct()
-					.toList();
+		// menuEntries : ancienne clé commune aux deux menus, valeur par défaut des clés propres à chaque menu
+		final String common = prop.getProperty("menuEntries");
+		final String modern = prop.getProperty("menuEntries.modern", common);
+		final String classic = prop.getProperty("menuEntries.classic", common);
+		if (modern != null) {
+			preferences.modernMenuEntries = parseMenuEntries(modern);
+		}
+		if (classic != null) {
+			preferences.classicMenuEntries = parseMenuEntries(classic);
 		}
 		final String target = prop.getProperty("menuTarget");
 		preferences.menuTarget = target == null ? null : MenuTarget.fromId(target).orElse(null);
@@ -156,6 +158,20 @@ public class Preferences {
 			throw new UserException("Propriété '" + key + "' manquante dans la configuration");
 		}
 		return value.trim();
+	}
+
+	// ids séparés par des virgules ; ids inconnus ignorés (configuration écrite par une version plus récente)
+	private static List<MenuEntry> parseMenuEntries(final String entries) {
+		return Arrays.stream(entries.split(","))
+				.filter(s -> !s.isBlank())
+				.map(MenuEntry::fromId)
+				.flatMap(Optional::stream)
+				.distinct()
+				.toList();
+	}
+
+	private static String formatMenuEntries(final List<MenuEntry> entries) {
+		return entries.stream().map(MenuEntry::id).collect(Collectors.joining(","));
 	}
 
 	private static List<Group> parseGroups(final String groupsString) {
@@ -195,7 +211,8 @@ public class Preferences {
 		if (certFingerprint != null) {
 			prop.setProperty("certFingerprint", certFingerprint);
 		}
-		prop.setProperty("menuEntries", menuEntries.stream().map(MenuEntry::id).collect(Collectors.joining(",")));
+		prop.setProperty("menuEntries.modern", formatMenuEntries(modernMenuEntries));
+		prop.setProperty("menuEntries.classic", formatMenuEntries(classicMenuEntries));
 		if (menuTarget != null) {
 			prop.setProperty("menuTarget", menuTarget.id());
 		}
@@ -203,7 +220,7 @@ public class Preferences {
 		try {
 			PropertiesFiles.store(configDir.resolve(CONFIG_FILENAME), prop,
 					"Configuration synoRight (groups=id:nom;id:nom, verbose=true pour les temps de traitement,"
-						+ " menuEntries=rights,status,... menuTarget=modern|classic|all)");
+						+ " menuEntries.modern / menuEntries.classic=rights,status,... menuTarget=modern|classic|all)");
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire les préférences", e);
 		}
@@ -261,15 +278,26 @@ public class Preferences {
 		this.certFingerprint = certFingerprint;
 	}
 
-	public List<MenuEntry> getMenuEntries() {
-		return menuEntries;
+	/**
+	 * Entrées d'un menu contextuel.
+	 *
+	 * @param modern true : menu Windows 11, false : menu classique
+	 */
+	public List<MenuEntry> getMenuEntries(final boolean modern) {
+		return modern ? modernMenuEntries : classicMenuEntries;
 	}
 
 	/**
-	 * Change les entrées du menu contextuel ; appeler save() pour persister.
+	 * Change les entrées d'un menu contextuel ; appeler save() pour persister.
+	 *
+	 * @param modern true : menu Windows 11, false : menu classique
 	 */
-	public void setMenuEntries(final List<MenuEntry> menuEntries) {
-		this.menuEntries = List.copyOf(menuEntries);
+	public void setMenuEntries(final boolean modern, final List<MenuEntry> entries) {
+		if (modern) {
+			modernMenuEntries = List.copyOf(entries);
+		} else {
+			classicMenuEntries = List.copyOf(entries);
+		}
 	}
 
 	/**

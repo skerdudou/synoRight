@@ -13,6 +13,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Folder;
 
 class SynoApiClientTest {
@@ -66,6 +67,17 @@ class SynoApiClientTest {
 		final List<SynoGroup> groups = SynoApiClient.parseGroupList(response);
 
 		assertEquals(List.of(new SynoGroup(3, "famille"), new SynoGroup(5, "amis")), groups);
+	}
+
+	@Test
+	void parseGroupList_sansGid_refuse() {
+		// réponse de SYNO.Core.Group list sans name_only=false : noms seuls
+		final JsonNode response = json("""
+				{"success":true,"data":{"groups":[{"name":"administrators","description":""}]}}""");
+
+		final UserException e = assertThrows(UserException.class, () -> SynoApiClient.parseGroupList(response));
+
+		assertTrue(e.getMessage().contains("administrators"));
 	}
 
 	@Test

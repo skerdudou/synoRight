@@ -101,7 +101,8 @@ final class ConfigWindow {
 	private record Installed(String message, MenuService.Status status) {
 	}
 
-	private record GroupChoice(JCheckBox box, Group group) {
+	/** Ligne de la section Groupes : groupe du NAS (id) coché ou non, et son nom court (nom des fichiers). */
+	private record GroupChoice(JCheckBox box, JTextField shortName, String id) {
 	}
 
 	private final Path configDir;
@@ -143,7 +144,8 @@ final class ConfigWindow {
 	private final List<GroupChoice> groupChoices = new ArrayList<>();
 
 	// Menu Explorateur
-	private final Map<MenuEntry, JCheckBox> entryBoxes = new EnumMap<>(MenuEntry.class);
+	private final Map<MenuEntry, JCheckBox> modernEntryBoxes = new EnumMap<>(MenuEntry.class);
+	private final Map<MenuEntry, JCheckBox> classicEntryBoxes = new EnumMap<>(MenuEntry.class);
 	private final Map<MenuTarget, JRadioButton> targetButtons = new EnumMap<>(MenuTarget.class);
 	private final JLabel menuAvailability = new JLabel(" ");
 	private final JLabel menuStatus = new JLabel("Installé : vérification…");
@@ -554,7 +556,7 @@ final class ConfigWindow {
 	// ---------------------------------------------------------------- Groupes
 
 	private JPanel groupsSection() {
-		groupBoxes.setLayout(new BoxLayout(groupBoxes, BoxLayout.Y_AXIS));
+		groupBoxes.setLayout(new GridBagLayout());
 		final JPanel top = new JPanel(new BorderLayout(0, 4));
 		top.add(groupWarnings, BorderLayout.NORTH);
 		top.add(groupHint, BorderLayout.SOUTH);
@@ -563,7 +565,8 @@ final class ConfigWindow {
 		final JPanel boxesTop = new JPanel(new BorderLayout());
 		boxesTop.add(groupBoxes, BorderLayout.NORTH);
 		content.add(new JScrollPane(boxesTop), BorderLayout.CENTER);
-		final JPanel section = section("Groupes", "Groupes du NAS dont les droits sont gérés par des fichiers @<groupe>.synoRight.", null);
+		final JPanel section = section("Groupes", "Groupes du NAS dont les droits sont gérés. Le nom court (par défaut le nom du groupe)"
+				+ " donne le nom des fichiers @<nom court>.synoRight et des entrées du menu.", null);
 		section.add(content, BorderLayout.CENTER);
 		return section;
 	}
@@ -574,10 +577,13 @@ final class ConfigWindow {
 		groupChoices.clear();
 		if (nasGroups == null) {
 			groupHint.setText("Tester la connexion pour modifier les groupes.");
+			int row = 0;
 			for (final Group group : form.groups) {
-				final JCheckBox box = new JCheckBox(group.getName(), true);
+				final JCheckBox box = new JCheckBox("Groupe d'id " + group.getId(), true);
 				box.setEnabled(false);
-				groupBoxes.add(box);
+				final JTextField shortName = new JTextField(group.getName(), 16);
+				shortName.setEnabled(false);
+				addGroupRow(row++, box, shortName);
 			}
 			groupWarnings.setText("");
 		} else {
@@ -585,12 +591,12 @@ final class ConfigWindow {
 			for (final SynoGroup nasGroup : nasGroups) {
 				final String id = String.valueOf(nasGroup.gid());
 				final Optional<Group> configured = form.groups.stream().filter(g -> g.getId().equals(id)).findAny();
-				// groupe déjà configuré : nom conservé (il donne le nom des fichiers de droits), un renommage est signalé
-				addGroupChoice(configured.orElse(new Group(id, nasGroup.name())), nasGroup.name(), configured.isPresent());
+				// groupe déjà configuré : son nom court est conservé (il donne le nom des fichiers de droits)
+				addGroupChoice(id, nasGroup.name(), configured.map(Group::getName).orElse(nasGroup.name()), configured.isPresent());
 			}
 			for (final Group group : form.groups) {
 				if (nasGroups.stream().noneMatch(g -> String.valueOf(g.gid()).equals(group.getId()))) {
-					addGroupChoice(group, group.getName() + " (absent du NAS)", true);
+					addGroupChoice(group.getId(), "Groupe d'id " + group.getId() + " (absent du NAS)", group.getName(), true);
 				}
 			}
 			refreshGroupWarnings();
@@ -599,18 +605,51 @@ final class ConfigWindow {
 		groupBoxes.repaint();
 	}
 
-	private void addGroupChoice(final Group group, final String label, final boolean selected) {
+	private void addGroupChoice(final String id, final String label, final String shortNameValue, final boolean selected) {
 		final JCheckBox box = new JCheckBox(label, selected);
+		final JTextField shortName = new JTextField(shortNameValue, 16);
+		shortName.setEnabled(selected);
 		box.addActionListener(e -> {
-			form.groups = groupChoices.stream().filter(c -> c.box().isSelected()).map(GroupChoice::group).toList();
-			refreshGroupWarnings();
+			shortName.setEnabled(box.isSelected());
+			updateFormGroups();
 		});
-		groupChoices.add(new GroupChoice(box, group));
-		groupBoxes.add(box);
+		onChange(shortName, this::updateFormGroups);
+		groupChoices.add(new GroupChoice(box, shortName, id));
+		addGroupRow(groupChoices.size() - 1, box, shortName);
+	}
+
+	private void addGroupRow(final int row, final JCheckBox box, final JTextField shortName) {
+		final GridBagConstraints c = new GridBagConstraints();
+		c.gridy = row;
+		c.insets = new Insets(2, 0, 2, 12);
+		c.anchor = GridBagConstraints.LINE_START;
+		c.gridx = 0;
+		groupBoxes.add(box, c);
+		c.gridx = 1;
+		groupBoxes.add(new JLabel("Nom court :"), c);
+		c.gridx = 2;
+		c.weightx = 1;
+		groupBoxes.add(shortName, c);
+	}
+
+	/** Groupes gérés d'après les lignes cochées et leurs noms courts. */
+	private void updateFormGroups() {
+		form.groups = groupChoices.stream()
+				.filter(c -> c.box().isSelected())
+				.map(c -> new Group(c.id(), c.shortName().getText().trim()))
+				.toList();
+		refreshGroupWarnings();
 	}
 
 	private void refreshGroupWarnings() {
-		final List<String> warnings = GroupChecks.warnings(nasGroups, form.groups);
+		final List<String> warnings = new ArrayList<>(GroupChecks.warnings(nasGroups, form.groups));
+		for (final Group group : form.groups) {
+			final String reason = GroupChecks.invalidShortName(group.getName(), form.groups, group.getId());
+			if (reason != null) {
+				warnings.add("Nom court « " + group.getName() + " » invalide : " + reason + ".");
+			}
+		}
+		warnings.addAll(form.renamedGroupNotes());
 		groupWarnings.setText(warnings.isEmpty() ? ""
 				: "<html>" + warnings.stream().map(ConfigWindow::escape).collect(Collectors.joining("<br>")) + "</html>");
 	}
@@ -618,16 +657,25 @@ final class ConfigWindow {
 	// ---------------------------------------------------------------- Menu Explorateur
 
 	private JPanel menuSection() {
-		final JPanel entries = new JPanel();
-		entries.setLayout(new BoxLayout(entries, BoxLayout.Y_AXIS));
+		// une ligne par entrée, une colonne par menu : les deux menus peuvent proposer des entrées différentes
+		final JPanel entries = new JPanel(new GridBagLayout());
 		entries.setBorder(BorderFactory.createTitledBorder("Entrées du menu"));
+		final GridBagConstraints c = new GridBagConstraints();
+		c.insets = new Insets(2, 0, 2, 16);
+		c.anchor = GridBagConstraints.LINE_START;
+		c.gridy = 0;
+		c.gridx = 1;
+		entries.add(new JLabel("Windows 11"), c);
+		c.gridx = 2;
+		entries.add(new JLabel("Classique"), c);
 		for (final MenuEntry entry : MenuEntry.values()) {
-			final JCheckBox box = new JCheckBox(entry.label(), form.menuEntries.contains(entry));
-			box.addActionListener(e -> form.menuEntries = Arrays.stream(MenuEntry.values())
-					.filter(m -> entryBoxes.get(m).isSelected())
-					.toList());
-			entryBoxes.put(entry, box);
-			entries.add(box);
+			c.gridy++;
+			c.gridx = 0;
+			entries.add(new JLabel(entry.label()), c);
+			c.gridx = 1;
+			entries.add(entryBox(entry, true), c);
+			c.gridx = 2;
+			entries.add(entryBox(entry, false), c);
 		}
 
 		final JPanel targets = new JPanel();
@@ -660,6 +708,22 @@ final class ConfigWindow {
 		buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
 		content.add(buttons);
 		return section("Menu de l'Explorateur", "Clic droit sur un dossier photo : droits, synchronisation, ouverture dans Synology Photos.", content);
+	}
+
+	/** Case d'une entrée pour le menu Windows 11 (modern) ou le menu classique. */
+	private JCheckBox entryBox(final MenuEntry entry, final boolean modern) {
+		final Map<MenuEntry, JCheckBox> boxes = modern ? modernEntryBoxes : classicEntryBoxes;
+		final JCheckBox box = new JCheckBox("", (modern ? form.modernMenuEntries : form.classicMenuEntries).contains(entry));
+		box.addActionListener(e -> {
+			final List<MenuEntry> selected = Arrays.stream(MenuEntry.values()).filter(m -> boxes.get(m).isSelected()).toList();
+			if (modern) {
+				form.modernMenuEntries = selected;
+			} else {
+				form.classicMenuEntries = selected;
+			}
+		});
+		boxes.put(entry, box);
+		return box;
 	}
 
 	private void addTarget(final JPanel panel, final ButtonGroup group, final MenuTarget target, final String label) {

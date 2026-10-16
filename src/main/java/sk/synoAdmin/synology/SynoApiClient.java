@@ -236,6 +236,8 @@ public class SynoApiClient {
 		params.put("offset", "0");
 		params.put("limit", "5000");
 		params.put("type", "local");
+		// sans name_only=false, DSM ne renvoie que les noms (pas de gid)
+		params.put("name_only", "false");
 
 		final JsonNode response = doRequest("/webapi/entry.cgi", params);
 
@@ -249,7 +251,11 @@ public class SynoApiClient {
 	static List<SynoGroup> parseGroupList(final JsonNode response) {
 		final List<SynoGroup> groups = new ArrayList<>();
 		for (final JsonNode group : response.path("data").path("groups")) {
-			groups.add(new SynoGroup(group.path("gid").asInt(), group.path("name").asString()));
+			final String name = group.path("name").asString();
+			if (!group.path("gid").isNumber()) {
+				throw new UserException("Réponse inattendue du NAS : identifiant (gid) absent pour le groupe '" + name + "'.");
+			}
+			groups.add(new SynoGroup(group.path("gid").asInt(), name));
 		}
 		return groups;
 	}

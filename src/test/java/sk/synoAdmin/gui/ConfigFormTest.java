@@ -63,7 +63,8 @@ class ConfigFormTest {
 	void toPreferences_urlNormaliseeEtMenu(@TempDir final Path dir) {
 		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd", List.of(new Group("3", "famille")), false);
 		final ConfigForm form = ConfigForm.from(pref);
-		form.menuEntries = List.of(MenuEntry.RIGHTS);
+		form.modernMenuEntries = List.of(MenuEntry.RIGHTS);
+		form.classicMenuEntries = List.of(MenuEntry.PUSH, MenuEntry.CONFIG);
 		form.menuTarget = MenuTarget.CLASSIC;
 		form.storePassword = false;
 
@@ -71,7 +72,8 @@ class ConfigFormTest {
 
 		assertEquals("https://nas", saved.getUrl());
 		assertNull(saved.getPassword());
-		assertEquals(List.of(MenuEntry.RIGHTS), saved.getMenuEntries());
+		assertEquals(List.of(MenuEntry.RIGHTS), saved.getMenuEntries(true));
+		assertEquals(List.of(MenuEntry.PUSH, MenuEntry.CONFIG), saved.getMenuEntries(false));
 		assertEquals(MenuTarget.CLASSIC, saved.getMenuTarget());
 	}
 
@@ -84,6 +86,31 @@ class ConfigFormTest {
 		form.groups = List.of(new Group("3", "famille"), new Group("5", "zoé"));
 
 		assertFalse(form.isDirty());
+	}
+
+	@Test
+	void nomCourt_invalideSignale(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd",
+				List.of(new Group("65536", "Kerdudou")), false);
+		final ConfigForm form = ConfigForm.from(pref);
+
+		form.groups = List.of(new Group("65536", "Kerdudou"), new Group("65537", "kerdudou"));
+
+		assertEquals(List.of("Nom court du groupe d'id 65537 invalide (« kerdudou ») : déjà utilisé par un autre groupe."),
+				form.validate().stream().filter(p -> p.contains("65537")).toList());
+	}
+
+	@Test
+	void nomCourtModifie_noteSurLesFichiersExistants(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd",
+				List.of(new Group("65536", "Kerdudou"), new Group("65537", "Godmez")), false);
+		final ConfigForm form = ConfigForm.from(pref);
+		assertTrue(form.renamedGroupNotes().isEmpty());
+
+		form.groups = List.of(new Group("65536", "Famille Kerdudou"), new Group("65537", "Godmez"));
+
+		assertEquals(1, form.renamedGroupNotes().size());
+		assertTrue(form.renamedGroupNotes().get(0).contains("@Kerdudou.synoRight"));
 	}
 
 	@Test

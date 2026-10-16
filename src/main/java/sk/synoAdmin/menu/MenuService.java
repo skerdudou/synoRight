@@ -36,25 +36,32 @@ public final class MenuService {
 
 	/** Installe le(s) menu(s) de la cible et retire l'autre ; renvoie un message de résultat. */
 	public static String install(final Preferences pref, final MenuTarget target) {
-		final List<MenuItem> items = MenuDefinition.build(pref.getMenuEntries(), pref.getGroups());
+		final List<MenuItem> modernItems = items(pref, true);
+		final List<MenuItem> classicItems = items(pref, false);
 		final boolean modern = target != MenuTarget.CLASSIC;
 		final boolean classic = target != MenuTarget.MODERN;
 
 		if (modern && classic) {
-			installBoth(() -> ClassicMenuInstaller.install(items, pref.getNasFolder(), pref.getConfigDir()),
-					() -> ModernMenuInstaller.install(items, pref.getConfigDir(), pref.getNasFolder()));
+			installBoth(() -> ClassicMenuInstaller.install(classicItems, pref.getNasFolder(), pref.getConfigDir()),
+					() -> ModernMenuInstaller.install(modernItems, pref.getConfigDir(), pref.getNasFolder()));
 		} else if (modern) {
-			ModernMenuInstaller.install(items, pref.getConfigDir(), pref.getNasFolder());
+			ModernMenuInstaller.install(modernItems, pref.getConfigDir(), pref.getNasFolder());
 			ClassicMenuInstaller.uninstall();
 		} else {
 			if (ModernMenuInstaller.isInstalled()) {
 				ModernMenuInstaller.uninstall();
 			}
-			ClassicMenuInstaller.install(items, pref.getNasFolder(), pref.getConfigDir());
+			ClassicMenuInstaller.install(classicItems, pref.getNasFolder(), pref.getConfigDir());
 		}
 		return "Menu contextuel installé pour l'utilisateur courant ("
-				+ (modern && classic ? "Windows 11 et classique" : modern ? "Windows 11" : "classique") + ", "
-				+ items.size() + " entrée(s)).";
+				+ (modern && classic ? "Windows 11 : " + modernItems.size() + " entrée(s), classique : " + classicItems.size() + " entrée(s)"
+						: modern ? "Windows 11, " + modernItems.size() + " entrée(s)" : "classique, " + classicItems.size() + " entrée(s)")
+				+ ").";
+	}
+
+	/** Entrées du menu Windows 11 (modern) ou du menu classique, selon la configuration. */
+	private static List<MenuItem> items(final Preferences pref, final boolean modern) {
+		return MenuDefinition.build(pref.getMenuEntries(modern), pref.getGroups());
 	}
 
 	/** Installe le menu classique d'abord : un échec du menu Windows 11 le laisse en place et est signalé. */
@@ -79,12 +86,11 @@ public final class MenuService {
 
 	/** Met à jour les menus installés après un changement de groupes ou d'entrées (sans réinstaller le package). */
 	public static void refresh(final Preferences pref) {
-		final List<MenuItem> items = MenuDefinition.build(pref.getMenuEntries(), pref.getGroups());
 		if (ClassicMenuInstaller.isInstalled()) {
-			ClassicMenuInstaller.install(items, pref.getNasFolder(), pref.getConfigDir());
+			ClassicMenuInstaller.install(items(pref, false), pref.getNasFolder(), pref.getConfigDir());
 		}
 		if (ModernMenuInstaller.isInstalled()) {
-			ModernMenuInstaller.refreshEntries(items, pref.getConfigDir(), pref.getNasFolder());
+			ModernMenuInstaller.refreshEntries(items(pref, true), pref.getConfigDir(), pref.getNasFolder());
 		}
 	}
 }

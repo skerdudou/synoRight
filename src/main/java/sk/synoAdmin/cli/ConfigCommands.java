@@ -83,7 +83,8 @@ final class ConfigCommands {
 			System.out.println("Verbose        : " + pref.isVerbose());
 			System.out.println("Session        : " + (pref.getSession().getCookieSession() == null ? "aucune" : "mémorisée"));
 			System.out.println("Menu Explorer  : " + describe(MenuService.status()));
-			System.out.println("Entrées menu   : " + pref.getMenuEntries().stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
+			System.out.println("Menu Windows 11: " + pref.getMenuEntries(true).stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
+			System.out.println("Menu classique : " + pref.getMenuEntries(false).stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
 			System.out.println();
 
 			boolean folderOk;

@@ -45,29 +45,43 @@ class PreferencesTest {
 		pref.save();
 
 		final Preferences reloaded = Preferences.fromFile(dir);
-		assertEquals(List.of(MenuEntry.RIGHTS, MenuEntry.STATUS, MenuEntry.PUSH, MenuEntry.CONFIG), reloaded.getMenuEntries());
+		final List<MenuEntry> defaults = List.of(MenuEntry.RIGHTS, MenuEntry.STATUS, MenuEntry.PUSH, MenuEntry.CONFIG);
+		assertEquals(defaults, reloaded.getMenuEntries(true));
+		assertEquals(defaults, reloaded.getMenuEntries(false));
 		assertNull(reloaded.getMenuTarget());
 	}
 
 	@Test
-	void menu_entreesEtCibleRelues(@TempDir final Path dir) {
+	void menu_entreesDeChaqueMenuEtCibleRelues(@TempDir final Path dir) {
 		final Preferences pref = new Preferences(dir, "\\\\NAS\\photo", "https://nas", "admin", null, List.of(new Group("3", "famille")), false);
-		pref.setMenuEntries(List.of(MenuEntry.GROUPS, MenuEntry.RIGHTS));
+		pref.setMenuEntries(true, List.of(MenuEntry.GROUPS, MenuEntry.RIGHTS));
+		pref.setMenuEntries(false, List.of(MenuEntry.PULL));
 		pref.setMenuTarget(MenuTarget.ALL);
 		pref.save();
 
 		final Preferences reloaded = Preferences.fromFile(dir);
-		assertEquals(List.of(MenuEntry.GROUPS, MenuEntry.RIGHTS), reloaded.getMenuEntries());
+		assertEquals(List.of(MenuEntry.GROUPS, MenuEntry.RIGHTS), reloaded.getMenuEntries(true));
+		assertEquals(List.of(MenuEntry.PULL), reloaded.getMenuEntries(false));
 		assertEquals(MenuTarget.ALL, reloaded.getMenuTarget());
+	}
+
+	@Test
+	void menu_ancienneCleCommune_valeurDesDeuxMenus(@TempDir final Path dir) throws IOException {
+		Files.writeString(dir.resolve(Preferences.CONFIG_FILENAME),
+				"folder=x\nurl=https://nas\nuser=admin\ngroups=3:famille\nmenuEntries=rights,groups\nmenuEntries.classic=push\n");
+
+		final Preferences pref = Preferences.fromFile(dir);
+		assertEquals(List.of(MenuEntry.RIGHTS, MenuEntry.GROUPS), pref.getMenuEntries(true));
+		assertEquals(List.of(MenuEntry.PUSH), pref.getMenuEntries(false));
 	}
 
 	@Test
 	void menu_idInconnuIgnore(@TempDir final Path dir) throws IOException {
 		Files.writeString(dir.resolve(Preferences.CONFIG_FILENAME),
-				"folder=x\nurl=https://nas\nuser=admin\ngroups=3:famille\nmenuEntries=rights, futur ,push\nmenuTarget=bidon\n");
+				"folder=x\nurl=https://nas\nuser=admin\ngroups=3:famille\nmenuEntries.modern=rights, futur ,push\nmenuTarget=bidon\n");
 
 		final Preferences pref = Preferences.fromFile(dir);
-		assertEquals(List.of(MenuEntry.RIGHTS, MenuEntry.PUSH), pref.getMenuEntries());
+		assertEquals(List.of(MenuEntry.RIGHTS, MenuEntry.PUSH), pref.getMenuEntries(true));
 		assertNull(pref.getMenuTarget());
 	}
 

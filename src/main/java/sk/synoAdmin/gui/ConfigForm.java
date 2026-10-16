@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.engine.GroupChecks;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuTarget;
 import sk.synoAdmin.prefs.Preferences;
@@ -27,7 +28,8 @@ final class ConfigForm {
 
 	/** Valeurs comparées pour détecter les modifications non enregistrées. */
 	private record State(String url, String user, String password, boolean storePassword, String folder,
-			List<String> groups, List<MenuEntry> menuEntries, MenuTarget menuTarget, String fingerprint) {
+			List<String> groups, List<MenuEntry> modernMenuEntries, List<MenuEntry> classicMenuEntries, MenuTarget menuTarget,
+			String fingerprint) {
 	}
 
 	String url = "";
@@ -36,7 +38,8 @@ final class ConfigForm {
 	boolean storePassword = true;
 	String folder = "";
 	List<Group> groups = List.of();
-	List<MenuEntry> menuEntries = MenuEntry.defaults();
+	List<MenuEntry> modernMenuEntries = MenuEntry.defaults();
+	List<MenuEntry> classicMenuEntries = MenuEntry.defaults();
 	/** null : choix automatique selon la version de Windows. */
 	MenuTarget menuTarget;
 	String fingerprint;
@@ -63,7 +66,8 @@ final class ConfigForm {
 			form.storePassword = pref.getPassword() != null;
 			form.folder = pref.getNasFolder();
 			form.groups = List.copyOf(pref.getGroups());
-			form.menuEntries = List.copyOf(pref.getMenuEntries());
+			form.modernMenuEntries = List.copyOf(pref.getMenuEntries(true));
+			form.classicMenuEntries = List.copyOf(pref.getMenuEntries(false));
 			form.menuTarget = pref.getMenuTarget();
 			form.fingerprint = pref.getCertFingerprint();
 			form.existing = true;
@@ -155,7 +159,35 @@ final class ConfigForm {
 		if (groups.isEmpty()) {
 			problems.add(GROUPS_REQUIRED);
 		}
+		for (final Group group : groups) {
+			final String reason = GroupChecks.invalidShortName(group.getName(), groups, group.getId());
+			if (reason != null) {
+				problems.add("Nom court du groupe d'id " + group.getId() + " invalide (« " + group.getName() + " ») : " + reason + ".");
+			}
+		}
 		return problems;
+	}
+
+	/**
+	 * Groupes déjà gérés dont le nom court change : leurs fichiers @ancien.synoRight ne seront plus reconnus.
+	 *
+	 * @return une note par groupe renommé, vide si aucun
+	 */
+	List<String> renamedGroupNotes() {
+		final List<String> notes = new ArrayList<>();
+		if (!existing) {
+			return notes;
+		}
+		for (final String before : snapshot.groups()) {
+			final String id = before.substring(0, before.indexOf(':'));
+			final String oldName = before.substring(before.indexOf(':') + 1);
+			groups.stream()
+					.filter(g -> g.getId().equals(id) && !g.getName().equals(oldName))
+					.findAny()
+					.ifPresent(g -> notes.add("Le nom court « " + oldName + " » devient « " + g.getName() + " » : les fichiers @" + oldName
+							+ ".synoRight existants ne seront plus pris en compte (« Photos → fichiers » recrée les nouveaux)."));
+		}
+		return notes;
 	}
 
 	static boolean isAccessibleFolder(final String folder) {
@@ -173,7 +205,8 @@ final class ConfigForm {
 	Preferences toPreferences(final Path dir, final boolean verbose) {
 		final Preferences pref = new Preferences(dir, folder, normalizedUrl(), user, storePassword ? password : null, groups, verbose);
 		pref.setCertFingerprint(fingerprint);
-		pref.setMenuEntries(menuEntries);
+		pref.setMenuEntries(true, modernMenuEntries);
+		pref.setMenuEntries(false, classicMenuEntries);
 		pref.setMenuTarget(menuTarget);
 		return pref;
 	}
@@ -200,6 +233,6 @@ final class ConfigForm {
 		return new State(normalizedUrl(), user, password, storePassword, folder,
 				// ordre indifférent : les cases suivent l'ordre du NAS, la configuration le sien
 				groups.stream().map(g -> g.getId() + ":" + g.getName()).sorted().toList(),
-				List.copyOf(menuEntries), menuTarget, fingerprint);
+				List.copyOf(modernMenuEntries), List.copyOf(classicMenuEntries), menuTarget, fingerprint);
 	}
 }

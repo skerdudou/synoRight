@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.i18n.Language;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuTarget;
 
@@ -21,6 +22,8 @@ public class Preferences {
 
 	public static final String PREF_FILE_NAME = ".synoRight";
 	public static final String CONFIG_FILENAME = "config" + PREF_FILE_NAME + ".properties";
+
+	public static final String LANGUAGE_AUTO = "auto";
 
 	private final Path configDir;
 	private final String nasFolder;
@@ -37,6 +40,8 @@ public class Preferences {
 	private List<MenuEntry> classicMenuEntries = MenuEntry.defaults();
 	// menu(s) à installer (null : automatique selon la version de Windows)
 	private MenuTarget menuTarget;
+	// langue de l'interface : "auto" (langue du système) ou un code de langue (en, fr, de, es, it)
+	private String languageSetting = LANGUAGE_AUTO;
 
 	public Preferences(final Path configDir, final String nasFolder, final String url, final String user, final String password, final List<Group> groups, final boolean verbose) {
 		this(configDir, nasFolder, url, user, password, groups, verbose, Session.load(configDir));
@@ -132,6 +137,7 @@ public class Preferences {
 		}
 		final String target = prop.getProperty("menuTarget");
 		preferences.menuTarget = target == null ? null : MenuTarget.fromId(target).orElse(null);
+		preferences.languageSetting = normalizeLanguageSetting(prop.getProperty("language"));
 
 		// migration de la session historiquement stockée dans la configuration
 		final boolean sessionInConfig = session.importFromConfig(prop);
@@ -150,6 +156,27 @@ public class Preferences {
 		}
 
 		return preferences;
+	}
+
+	// "auto" si absent ou inconnu, sinon le code de langue en minuscules
+	private static String normalizeLanguageSetting(final String value) {
+		return Language.fromCode(value).map(Language::code).orElse(LANGUAGE_AUTO);
+	}
+
+	/**
+	 * Lit seulement le réglage de langue de la configuration, sans rien afficher : "auto" sur toute erreur.
+	 * Utilisé au démarrage, avant le traitement de la ligne de commande.
+	 */
+	public static String readLanguageSetting(final Path configDir) {
+		try {
+			final Path configFile = configDir.resolve(CONFIG_FILENAME);
+			if (!Files.isRegularFile(configFile)) {
+				return LANGUAGE_AUTO;
+			}
+			return normalizeLanguageSetting(PropertiesFiles.load(configFile).getProperty("language"));
+		} catch (final IOException | RuntimeException e) {
+			return LANGUAGE_AUTO;
+		}
 	}
 
 	private static String getRequiredProperty(final Properties prop, final String key) {
@@ -216,11 +243,13 @@ public class Preferences {
 		if (menuTarget != null) {
 			prop.setProperty("menuTarget", menuTarget.id());
 		}
+		prop.setProperty("language", languageSetting);
 
 		try {
 			PropertiesFiles.store(configDir.resolve(CONFIG_FILENAME), prop,
 					"Configuration synoRight (groups=id:nom;id:nom, verbose=true pour les temps de traitement,"
-						+ " menuEntries.modern / menuEntries.classic=rights,status,... menuTarget=modern|classic|all)");
+						+ " menuEntries.modern / menuEntries.classic=rights,status,... menuTarget=modern|classic|all,"
+							+ " language=auto|en|fr|de|es|it)");
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire les préférences", e);
 		}
@@ -312,6 +341,20 @@ public class Preferences {
 	 */
 	public void setMenuTarget(final MenuTarget menuTarget) {
 		this.menuTarget = menuTarget;
+	}
+
+	/**
+	 * Réglage de langue : "auto" (langue du système) ou un code de langue.
+	 */
+	public String getLanguageSetting() {
+		return languageSetting;
+	}
+
+	/**
+	 * Change le réglage de langue ("auto" ou un code ; toute autre valeur donne "auto") ; appeler save() pour persister.
+	 */
+	public void setLanguageSetting(final String languageSetting) {
+		this.languageSetting = normalizeLanguageSetting(languageSetting);
 	}
 
 	public boolean isVerbose() {

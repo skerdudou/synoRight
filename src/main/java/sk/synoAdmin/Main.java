@@ -2,10 +2,14 @@ package sk.synoAdmin;
 
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.file.Paths;
 import java.util.Arrays;
 
 import picocli.CommandLine;
 import sk.synoAdmin.cli.SynoRightCommand;
+import sk.synoAdmin.i18n.Language;
+import sk.synoAdmin.i18n.Messages;
+import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.ui.Interaction;
 
 public class Main {
@@ -34,6 +38,7 @@ public class Main {
 			System.err.println("Si ce message vient du menu contextuel, le réinstaller : synoRight menu install");
 			exitCode = 2;
 		} else {
+			initLanguage(args);
 			// picocli écrit par défaut avec l'encodage de la JVM (UTF-8) : on reprend celui de la console
 			final CommandLine commandLine = new CommandLine(new SynoRightCommand())
 					.setOut(new PrintWriter(new OutputStreamWriter(System.out, System.out.charset()), true))
@@ -47,6 +52,28 @@ public class Main {
 			System.out.println("Total time : " + (System.nanoTime() - start) / 1_000_000 + " ms");
 		}
 		return exitCode;
+	}
+
+	// la langue doit être connue avant picocli (aide, erreurs d'analyse) : on lit -c / --config à la main
+	private static void initLanguage(final String[] args) {
+		String dir = null;
+		for (int i = 0; i < args.length; i++) {
+			if ((args[i].equals("-c") || args[i].equals("--config")) && i + 1 < args.length) {
+				dir = args[i + 1];
+				break;
+			}
+			if (args[i].startsWith("--config=")) {
+				dir = args[i].substring("--config=".length());
+				break;
+			}
+		}
+		String setting = Preferences.LANGUAGE_AUTO;
+		try {
+			setting = Preferences.readLanguageSetting(Preferences.resolveConfigDir(dir == null ? null : Paths.get(dir)));
+		} catch (final RuntimeException e) {
+			// chemin invalide : on garde la langue automatique
+		}
+		Messages.setLanguage(Language.resolve(setting));
 	}
 
 	// erreur prévue : message seul ; imprévue : message, détail en mode verbeux (toujours dans l'IHM)

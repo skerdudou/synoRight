@@ -72,7 +72,7 @@ final class ConfigCommands {
 		System.out.println(String.format("%-15s: %s", Messages.get("cli.config.label." + label), value));
 	}
 
-	@Command(name = "config", description = "Affiche la configuration et vérifie l'accès au dossier photos, au NAS et aux groupes.")
+	@Command(name = "config")
 	static final class Config extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -112,7 +112,7 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "groups", description = "Liste les groupes gérés.", subcommands = { GroupsAdd.class, GroupsRemove.class })
+	@Command(name = "groups", subcommands = { GroupsAdd.class, GroupsRemove.class })
 	static final class Groups extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -142,7 +142,7 @@ final class ConfigCommands {
 		return new Group(id, name.trim());
 	}
 
-	@Command(name = "add", description = "Ajoute des groupes, choisis parmi ceux du NAS.")
+	@Command(name = "add")
 	static final class GroupsAdd extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -170,7 +170,7 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "remove", description = "Retire des groupes de la configuration (sans toucher aux droits ni aux fichiers existants).")
+	@Command(name = "remove")
 	static final class GroupsRemove extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -191,9 +191,9 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "password", description = "Change le mot de passe mémorisé (vérifié auprès du NAS), ou l'oublie avec --forget.")
+	@Command(name = "password")
 	static final class Password extends AbstractCommand {
-		@Option(names = "--forget", description = "Oublie le mot de passe : il sera demandé à chaque connexion.")
+		@Option(names = "--forget", descriptionKey = "cli.opt.forget")
 		boolean forget;
 
 		@Override
@@ -219,7 +219,7 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "logout", description = "Oublie la session Synology mémorisée (le prochain login redemandera l'OTP).")
+	@Command(name = "logout")
 	static final class Logout extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -228,7 +228,7 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "menu", description = "Menu contextuel de l'Explorateur Windows.", subcommands = { MenuInstall.class, MenuUninstall.class })
+	@Command(name = "menu", subcommands = { MenuInstall.class, MenuUninstall.class })
 	static final class Menu extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -236,17 +236,17 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "install", description = "Installe (ou met à jour) le menu contextuel pour l'utilisateur courant.")
+	@Command(name = "install")
 	static final class MenuInstall extends AbstractCommand {
 		@ArgGroup(exclusive = true)
 		TargetOption targetOption;
 
 		static final class TargetOption {
-			@Option(names = "--modern", description = "Menu principal de Windows 11 (une autorisation administrateur la première fois).")
+			@Option(names = "--modern", descriptionKey = "cli.opt.modern")
 			boolean modern;
-			@Option(names = "--classic", description = "Menu classique (Afficher plus d'options).")
+			@Option(names = "--classic", descriptionKey = "cli.opt.classic")
 			boolean classic;
-			@Option(names = "--all", description = "Les deux menus.")
+			@Option(names = "--all", descriptionKey = "cli.opt.all")
 			boolean all;
 		}
 
@@ -268,7 +268,7 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "uninstall", description = "Désinstalle le menu contextuel.")
+	@Command(name = "uninstall")
 	static final class MenuUninstall extends AbstractCommand {
 		@Override
 		protected void execute() {

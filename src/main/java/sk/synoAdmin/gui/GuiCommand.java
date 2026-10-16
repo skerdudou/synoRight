@@ -10,7 +10,7 @@ import sk.synoAdmin.engine.SyncPlan;
  * Sous-commande 'gui' (lanceur synoRightGui.exe et menu contextuel) : fenêtres Swing.
  * Sans sous-commande : fenêtre de configuration.
  */
-@Command(name = "gui", hidden = true, description = "Interface graphique (fenêtre de configuration par défaut).",
+@Command(name = "gui", hidden = true,
 		subcommands = { GuiCommand.Config.class, GuiCommand.Rights.class, GuiCommand.Sync.class,
 				GuiCommand.Grant.class, GuiCommand.Revoke.class, GuiCommand.Open.class })
 public final class GuiCommand extends AbstractCommand {
@@ -41,7 +41,7 @@ public final class GuiCommand extends AbstractCommand {
 		abstract java.awt.Window createWindow();
 	}
 
-	@Command(name = "config", description = "Fenêtre de configuration.")
+	@Command(name = "config")
 	static final class Config extends WindowCommand {
 		@Override
 		java.awt.Window createWindow() {
@@ -49,9 +49,9 @@ public final class GuiCommand extends AbstractCommand {
 		}
 	}
 
-	@Command(name = "rights", description = "Droits d'un dossier.")
+	@Command(name = "rights")
 	static final class Rights extends WindowCommand {
-		@Parameters(index = "0", paramLabel = "<dossier>")
+		@Parameters(index = "0", paramLabel = "<folder>")
 		String folder;
 
 		@Override
@@ -60,11 +60,11 @@ public final class GuiCommand extends AbstractCommand {
 		}
 	}
 
-	@Command(name = "sync", description = "Synchronisation avec aperçu des écarts.")
+	@Command(name = "sync")
 	static final class Sync extends WindowCommand {
-		@Option(names = "--push", description = "Met en avant la synchro fichiers -> Photos.")
+		@Option(names = "--push", descriptionKey = "cli.opt.guiPush")
 		boolean push;
-		@Option(names = "--pull", description = "Met en avant la synchro Photos -> fichiers.")
+		@Option(names = "--pull", descriptionKey = "cli.opt.guiPull")
 		boolean pull;
 
 		@Override
@@ -73,11 +73,11 @@ public final class GuiCommand extends AbstractCommand {
 		}
 	}
 
-	@Command(name = "grant", description = "Donne le droit à un groupe (résultat en dialogue).")
+	@Command(name = "grant")
 	static final class Grant extends AbstractCommand {
-		@Parameters(index = "0", paramLabel = "<groupe>")
+		@Parameters(index = "0", paramLabel = "<group>")
 		String group;
-		@Parameters(index = "1", paramLabel = "<dossier>")
+		@Parameters(index = "1", paramLabel = "<folder>")
 		String folder;
 
 		@Override
@@ -87,11 +87,11 @@ public final class GuiCommand extends AbstractCommand {
 		}
 	}
 
-	@Command(name = "revoke", description = "Retire le droit à un groupe (résultat en dialogue).")
+	@Command(name = "revoke")
 	static final class Revoke extends AbstractCommand {
-		@Parameters(index = "0", paramLabel = "<groupe>")
+		@Parameters(index = "0", paramLabel = "<group>")
 		String group;
-		@Parameters(index = "1", paramLabel = "<dossier>")
+		@Parameters(index = "1", paramLabel = "<folder>")
 		String folder;
 
 		@Override
@@ -101,9 +101,9 @@ public final class GuiCommand extends AbstractCommand {
 		}
 	}
 
-	@Command(name = "open", description = "Ouvre le dossier dans Synology Photos.")
+	@Command(name = "open")
 	static final class Open extends AbstractCommand {
-		@Parameters(index = "0", paramLabel = "<dossier>")
+		@Parameters(index = "0", paramLabel = "<folder>")
 		String folder;
 
 		@Override

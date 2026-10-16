@@ -18,7 +18,6 @@ import sk.synoAdmin.prefs.Preferences;
  */
 @Command(name = "synoRight", scope = ScopeType.INHERIT, mixinStandardHelpOptions = true,
 		versionProvider = SynoRightCommand.VersionProvider.class,
-		description = "Synchronise les droits des albums Synology Photos avec des fichiers @<groupe>.synoRight posés dans les dossiers photo.",
 		subcommands = {
 				InitCommand.class,
 				RightCommands.Status.class,
@@ -36,17 +35,17 @@ import sk.synoAdmin.prefs.Preferences;
 				GuiCommand.class })
 public class SynoRightCommand implements Callable<Integer> {
 
-	@Option(names = { "-c", "--config" }, scope = ScopeType.INHERIT, paramLabel = "<dossier>",
-			description = "Répertoire de la configuration (défaut : ~/.synoRight, ou le répertoire courant s'il en contient une).")
+	@Option(names = { "-c", "--config" }, scope = ScopeType.INHERIT, paramLabel = "<folder>",
+			descriptionKey = "cli.opt.config")
 	Path configDir;
 
 	@Option(names = { "-v", "--verbose" }, scope = ScopeType.INHERIT,
-			description = "Affiche les temps de traitement et le détail des erreurs (aussi activable par verbose=true dans la configuration).")
+			descriptionKey = "cli.opt.verbose")
 	boolean verbose;
 
 	// lue par Main : pause avant fermeture de la fenêtre ouverte par le menu contextuel
 	@Option(names = "--pause", scope = ScopeType.INHERIT, hidden = true,
-			description = "Attend Entrée avant de rendre la main (fenêtre ouverte par le menu contextuel).")
+			descriptionKey = "cli.opt.pause")
 	boolean pause;
 
 	@Spec

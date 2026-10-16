@@ -25,7 +25,7 @@ import sk.synoAdmin.synology.SynoGroup;
  * dossier photos, choix des groupes parmi ceux du NAS, puis menu contextuel.
  * Relancé sur une configuration existante, il propose les valeurs actuelles.
  */
-@Command(name = "init", description = "Assistant de configuration : connexion au NAS, dossier photos, groupes et menu contextuel.")
+@Command(name = "init")
 final class InitCommand extends AbstractCommand {
 
 	@Override

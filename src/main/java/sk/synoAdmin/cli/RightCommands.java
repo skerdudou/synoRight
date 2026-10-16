@@ -18,7 +18,7 @@ final class RightCommands {
 		// conteneur
 	}
 
-	@Command(name = "status", description = "Affiche les écarts entre les fichiers de droits et Synology Photos, sans rien modifier.")
+	@Command(name = "status")
 	static final class Status extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -34,14 +34,14 @@ final class RightCommands {
 	 * Options communes aux synchros complètes.
 	 */
 	abstract static class FullSync extends AbstractCommand {
-		@Option(names = { "-y", "--yes" }, description = "Applique sans demander de confirmation.")
+		@Option(names = { "-y", "--yes" }, descriptionKey = "cli.opt.yes")
 		boolean yes;
 
-		@Option(names = { "-n", "--dry-run" }, description = "Affiche les modifications sans les appliquer.")
+		@Option(names = { "-n", "--dry-run" }, descriptionKey = "cli.opt.dryRun")
 		boolean dryRun;
 	}
 
-	@Command(name = "pull", description = "Synology Photos -> fichiers : crée/supprime les fichiers .synoRight d'après les droits de Synology Photos.")
+	@Command(name = "pull")
 	static final class Pull extends FullSync {
 		@Override
 		protected void execute() {
@@ -53,7 +53,7 @@ final class RightCommands {
 		}
 	}
 
-	@Command(name = "push", description = "Fichiers -> Synology Photos : applique dans Synology Photos les droits décrits par les fichiers .synoRight.")
+	@Command(name = "push")
 	static final class Push extends FullSync {
 		@Override
 		protected void execute() {
@@ -65,9 +65,9 @@ final class RightCommands {
 		}
 	}
 
-	@Command(name = "show", description = "Affiche les droits d'un dossier côté Synology Photos et côté fichiers.")
+	@Command(name = "show")
 	static final class Show extends AbstractCommand {
-		@Parameters(index = "0", arity = "0..1", paramLabel = "<dossier>", defaultValue = ".", description = "Dossier (défaut : répertoire courant).")
+		@Parameters(index = "0", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
 		String folder;
 
 		@Override
@@ -79,12 +79,12 @@ final class RightCommands {
 		}
 	}
 
-	@Command(name = "grant", description = "Donne le droit à un groupe sur un dossier (et sur son dossier parent).")
+	@Command(name = "grant")
 	static final class Grant extends AbstractCommand {
-		@Parameters(index = "0", paramLabel = "<groupe>", description = "Nom du groupe (tel que configuré).")
+		@Parameters(index = "0", paramLabel = "<group>", descriptionKey = "cli.param.group")
 		String group;
 
-		@Parameters(index = "1", arity = "0..1", paramLabel = "<dossier>", defaultValue = ".", description = "Dossier (défaut : répertoire courant).")
+		@Parameters(index = "1", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
 		String folder;
 
 		@Override
@@ -98,12 +98,12 @@ final class RightCommands {
 		}
 	}
 
-	@Command(name = "revoke", description = "Retire le droit d'un groupe sur un dossier.")
+	@Command(name = "revoke")
 	static final class Revoke extends AbstractCommand {
-		@Parameters(index = "0", paramLabel = "<groupe>", description = "Nom du groupe (tel que configuré).")
+		@Parameters(index = "0", paramLabel = "<group>", descriptionKey = "cli.param.group")
 		String group;
 
-		@Parameters(index = "1", arity = "0..1", paramLabel = "<dossier>", defaultValue = ".", description = "Dossier (défaut : répertoire courant).")
+		@Parameters(index = "1", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
 		String folder;
 
 		@Override

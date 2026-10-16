@@ -6,6 +6,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 
 import picocli.CommandLine;
+import sk.synoAdmin.cli.LocalizedHelp;
 import sk.synoAdmin.cli.SynoRightCommand;
 import sk.synoAdmin.i18n.Language;
 import sk.synoAdmin.i18n.Messages;
@@ -39,19 +40,25 @@ public class Main {
 			exitCode = 2;
 		} else {
 			initLanguage(args);
-			// picocli écrit par défaut avec l'encodage de la JVM (UTF-8) : on reprend celui de la console
-			final CommandLine commandLine = new CommandLine(new SynoRightCommand())
-					.setOut(new PrintWriter(new OutputStreamWriter(System.out, System.out.charset()), true))
-					.setErr(new PrintWriter(new OutputStreamWriter(System.err, System.err.charset()), true))
-					.setSubcommandsCaseInsensitive(true)
-					.setExecutionExceptionHandler((e, cmd, parseResult) -> handleError(e));
-			exitCode = commandLine.execute(args);
+			exitCode = newCommandLine().execute(args);
 		}
 
 		if (LogUtil.isVerbose()) {
 			System.out.println("Total time : " + (System.nanoTime() - start) / 1_000_000 + " ms");
 		}
 		return exitCode;
+	}
+
+	/** Construit la ligne de commande, textes d'aide dans la langue courante (à appeler après {@link #initLanguage}). */
+	static CommandLine newCommandLine() {
+		// picocli écrit par défaut avec l'encodage de la JVM (UTF-8) : on reprend celui de la console
+		return new CommandLine(new SynoRightCommand())
+				.setResourceBundle(Messages.bundle())
+				.setHelpFactory(LocalizedHelp::new)
+				.setOut(new PrintWriter(new OutputStreamWriter(System.out, System.out.charset()), true))
+				.setErr(new PrintWriter(new OutputStreamWriter(System.err, System.err.charset()), true))
+				.setSubcommandsCaseInsensitive(true)
+				.setExecutionExceptionHandler((e, cmd, parseResult) -> handleError(e));
 	}
 
 	// la langue doit être connue avant picocli (aide, erreurs d'analyse) : on lit -c / --config à la main

@@ -19,10 +19,10 @@ import sk.synoAdmin.prefs.Preferences;
 /**
  * Commande « rights » : choisit les groupes autorisés sur un dossier.
  */
-@Command(name = "rights", description = "Choisit les groupes autorisés sur un dossier.")
+@Command(name = "rights")
 public final class RightsCommand extends AbstractCommand {
 
-	@Parameters(index = "0", arity = "0..1", paramLabel = "<dossier>", defaultValue = ".", description = "Dossier (défaut : répertoire courant).")
+	@Parameters(index = "0", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
 	String folder;
 
 	@Override

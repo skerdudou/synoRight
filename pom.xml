@@ -88,9 +88,14 @@
 	</build>
 
 	<profiles>
-		<!-- mvn package -Pexe : application autonome target/dist/synoRight/synoRight.exe (runtime Java embarqué) -->
+		<!-- mvn package -Pexe : application autonome target/dist/synoRight/synoRight.exe (runtime Java embarqué),
+			menu Windows 11 compris (nécessite VS Build Tools + Windows SDK + certificat : native/create-cert.ps1).
+			-Dnative.skip pour s'en passer. -->
 		<profile>
 			<id>exe</id>
+			<properties>
+				<native.skip>false</native.skip>
+			</properties>
 			<build>
 				<plugins>
 					<plugin>
@@ -149,6 +154,32 @@
 										<argument>--add-modules</argument>
 										<argument>java.base,java.desktop,java.net.http,java.sql,jdk.charsets</argument>
 										<argument>--win-console</argument>
+										<argument>--description</argument>
+										<argument>synoRight</argument>
+										<argument>--add-launcher</argument>
+										<argument>synoRightGui=${project.basedir}/src/main/jpackage/synoRightGui.properties</argument>
+									</arguments>
+								</configuration>
+							</execution>
+							<execution>
+								<id>native-menu</id>
+								<phase>package</phase>
+								<goals>
+									<goal>exec</goal>
+								</goals>
+								<configuration>
+									<skip>${native.skip}</skip>
+									<executable>powershell</executable>
+									<arguments>
+										<argument>-NoProfile</argument>
+										<argument>-ExecutionPolicy</argument>
+										<argument>Bypass</argument>
+										<argument>-File</argument>
+										<argument>${project.basedir}/native/build.ps1</argument>
+										<argument>-AppDir</argument>
+										<argument>${project.build.directory}/dist/synoRight</argument>
+										<argument>-Version</argument>
+										<argument>${project.version}</argument>
 									</arguments>
 								</configuration>
 							</execution>

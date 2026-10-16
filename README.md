@@ -10,8 +10,10 @@ Principe : un dossier photo porte un fichier caché `@<groupe>.synoRight` pour c
    ```
    mvn package -Pexe
    ```
-   puis copier le dossier `target/dist/synoRight/` à son emplacement définitif (ex : `C:\Program Files\synoRight`).
-2. Lancer l'assistant :
+   Prérequis : JDK 25, Maven, et pour le menu Windows 11 : Visual Studio 2022 Build Tools (charge de travail C++) et Windows 11 SDK, ainsi qu'un certificat de signature créé une seule fois par `native\create-cert.ps1`. `-Dnative.skip` construit l'application sans le menu Windows 11 (aucun de ces prérequis natifs n'est alors nécessaire).
+
+   Puis copier le dossier `target/dist/synoRight/` à son emplacement définitif (ex : `C:\Program Files\synoRight`). Il contient `synoRight.exe` (console), `synoRightGui.exe` (sans console) et, pour le menu Windows 11, `synoRightMenu.dll`, `synoRight.msix` et `synoRight.cer`.
+2. Lancer **`synoRightGui.exe`** : la fenêtre de configuration s'ouvre (voir « Interface graphique »). Ou, en console, l'assistant :
    ```
    synoRight init
    ```
@@ -20,6 +22,17 @@ Principe : un dossier photo porte un fichier caché `@<groupe>.synoRight` pour c
 Relancer `init` sur une configuration existante propose les valeurs actuelles, mot de passe compris (Entrée pour les conserver). La session mémorisée n'est remplacée qu'à l'enregistrement : abandonner l'assistant ne change rien.
 
 Sans le profil `exe`, `mvn package` produit `target/synoRight.jar`, utilisable avec `java -jar synoRight.jar <commande>` (Java 25+).
+
+## Interface graphique
+
+`synoRightGui.exe` (ou `synoRight gui`) ouvre la **fenêtre de configuration** : connexion au NAS (URL, compte, mot de passe, test avec OTP et certificat), dossier photos, groupes gérés (choisis dans la liste du NAS), menu de l'Explorateur (entrées, Windows 11 / classique / les deux, installation et désinstallation) et synchronisation.
+
+Le menu contextuel ouvre d'autres fenêtres, sans console :
+
+- **Droits du dossier** : les groupes autorisés sur le dossier, à cocher ou décocher.
+- **Synchronisation** : un aperçu des écarts entre fichiers et Synology Photos, puis application dans un sens ou dans l'autre après confirmation.
+
+« Synchroniser fichiers → Photos » retire aussi les droits hérités du parent par les nouveaux dossiers.
 
 ## Commandes
 
@@ -40,7 +53,9 @@ synoRight [-c <dossierConfig>] [-v] <commande>
 | `groups` / `groups add` / `groups remove` | Liste / ajoute (parmi les groupes du NAS) / retire des groupes gérés |
 | `password [--forget]` | Change (après vérification) ou oublie le mot de passe mémorisé |
 | `logout` | Oublie la session Synology mémorisée |
-| `menu install` / `menu uninstall` | Menu contextuel de l'Explorateur Windows |
+| `rights [dossier]` | Choix des groupes autorisés sur un dossier (fenêtre) |
+| `menu install [--modern\|--classic\|--all]` / `menu uninstall` | Menu contextuel de l'Explorateur Windows |
+| `gui` | Ouvre l'interface graphique (c'est ce que lance `synoRightGui.exe`) |
 
 `[dossier]` vaut par défaut le répertoire courant. `pull` et `push` affichent le détail des modifications puis demandent confirmation (`-y` pour appliquer directement, `-n` / `--dry-run` pour seulement simuler). Les dossiers pas encore indexés par Synology Photos sont signalés et ignorés.
 
@@ -62,7 +77,13 @@ groups=3:famille;5:amis
 verbose=false
 # optionnel : empreinte SHA-256 du certificat auto-signé du NAS à accepter (proposé par init)
 certFingerprint=AB:CD:...
+# optionnel : entrées du menu de l'Explorateur (rights, open, status, push, pull, groups, config)
+menuEntries=rights,status,push,pull,groups,config
+# optionnel : modern, classic ou all (absent = Windows 11 si disponible, sinon classique)
+menuTarget=modern
 ```
+
+L'entrée `open` ouvre l'album du dossier dans Synology Photos ; elle est désactivée par défaut.
 
 Les commandes qui modifient la configuration (`init`, `groups`, `password`, migrations) réécrivent le fichier : les commentaires ajoutés à la main ne sont pas conservés.
 
@@ -76,8 +97,12 @@ Si le mot de passe mémorisé est refusé par le NAS, il est redemandé et peut 
 
 ## Intégration Explorateur Windows
 
-`synoRight menu install` (proposé à la fin d'`init`) installe un menu contextuel « Droits Synology Photos » (clic droit sur un dossier ou sur le fond d'un dossier ouvert) pour l'utilisateur courant — écrit sous `HKCU`, pas besoin de droits administrateur. Il propose : voir les droits du dossier, état de la synchro, les deux synchros complètes, et l'ajout/suppression de chaque groupe configuré.
+Le menu contextuel « Droits Synology Photos » (clic droit sur un dossier ou sur le fond d'un dossier ouvert) s'installe depuis la fenêtre de configuration (section Menu Explorateur) ou par `synoRight menu install [--modern|--classic|--all]` (proposé à la fin d'`init`) :
 
-La fenêtre ouverte par le menu attend Entrée avant de se fermer (option `--pause`, ajoutée par le menu ; sans elle, l'outil rend la main directement).
+- **Windows 11** : le menu apparaît **au premier niveau** du clic droit. Il repose sur le package `synoRight` et la DLL `synoRightMenu.dll`. La première installation sur un poste demande une **autorisation administrateur** (une seule fois) pour approuver le certificat `CN=synoRight` qui signe le package.
+- **Classique** : le menu est sous « Afficher plus d'options », écrit sous `HKCU` (pas de droits administrateur).
+- Sans choix, Windows 11 est utilisé s'il est disponible, sinon le menu classique (`menuTarget`).
 
-Les commandes générées pointent vers `synoRight.exe` (ou java + jar) à son emplacement courant : relancer `menu install` après un déplacement. `groups add/remove` met le menu à jour automatiquement. Un menu installé par une ancienne version (syntaxe `-a ACTION`) affiche un message invitant à le réinstaller.
+Les entrées sont au choix (`menuEntries`) : droits du dossier, ouvrir dans Synology Photos, état de la synchro, les deux synchros complètes, ajout/retrait de chaque groupe configuré, configuration de synoRight. Les changements de groupes ou d'entrées sont pris en compte **sans réinstaller** (`groups add/remove` et la fenêtre de configuration mettent le menu à jour).
+
+Le menu lance `synoRightGui.exe` : plus de fenêtre console depuis le menu. Les commandes générées pointent vers l'application à son emplacement courant : relancer l'installation du menu après un déplacement. Un menu installé par une ancienne version (syntaxe `-a ACTION`) affiche un message invitant à le réinstaller.

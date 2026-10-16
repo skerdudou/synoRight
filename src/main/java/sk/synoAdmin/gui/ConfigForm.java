@@ -10,6 +10,7 @@ import java.util.Objects;
 
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.GroupChecks;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuTarget;
 import sk.synoAdmin.prefs.Preferences;
@@ -22,14 +23,19 @@ import sk.synoAdmin.synology.ConnectionCheck;
  */
 final class ConfigForm {
 
-	static final String CONNECTION_REQUIRED = "Tester la connexion au NAS.";
-	static final String FOLDER_INVALID = "Dossier des photos introuvable ou inaccessible.";
-	static final String GROUPS_REQUIRED = "Choisir au moins un groupe.";
+	/** Section de la fenêtre où corriger un problème de validation. */
+	enum Section {
+		CONNECTION, FOLDER, GROUPS
+	}
+
+	/** Problème empêchant l'enregistrement : section à afficher et message (déjà traduit). */
+	record Problem(Section section, String message) {
+	}
 
 	/** Valeurs comparées pour détecter les modifications non enregistrées. */
 	private record State(String url, String user, String password, boolean storePassword, String folder,
 			List<String> groups, List<MenuEntry> modernMenuEntries, List<MenuEntry> classicMenuEntries, MenuTarget menuTarget,
-			String fingerprint) {
+			String fingerprint, String language) {
 	}
 
 	String url = "";
@@ -43,6 +49,8 @@ final class ConfigForm {
 	/** null : choix automatique selon la version de Windows. */
 	MenuTarget menuTarget;
 	String fingerprint;
+	/** Langue de l'interface : "auto" ou un code (en, fr, de, es, it). */
+	String language = Preferences.LANGUAGE_AUTO;
 
 	private boolean existing;
 	private State snapshot;
@@ -70,6 +78,7 @@ final class ConfigForm {
 			form.classicMenuEntries = List.copyOf(pref.getMenuEntries(false));
 			form.menuTarget = pref.getMenuTarget();
 			form.fingerprint = pref.getCertFingerprint();
+			form.language = pref.getLanguageSetting();
 			form.existing = true;
 		}
 		form.snapshot = form.state();
@@ -148,21 +157,21 @@ final class ConfigForm {
 	/**
 	 * Problèmes empêchant l'enregistrement, vide si aucun.
 	 */
-	List<String> validate() {
-		final List<String> problems = new ArrayList<>();
+	List<Problem> validate() {
+		final List<Problem> problems = new ArrayList<>();
 		if (!connectionVerified()) {
-			problems.add(CONNECTION_REQUIRED);
+			problems.add(new Problem(Section.CONNECTION, Messages.get("gui.config.problem.connectionRequired")));
 		}
 		if (!isAccessibleFolder(folder)) {
-			problems.add(FOLDER_INVALID);
+			problems.add(new Problem(Section.FOLDER, Messages.get("gui.config.problem.folderInvalid")));
 		}
 		if (groups.isEmpty()) {
-			problems.add(GROUPS_REQUIRED);
+			problems.add(new Problem(Section.GROUPS, Messages.get("gui.config.problem.groupsRequired")));
 		}
 		for (final Group group : groups) {
 			final String reason = GroupChecks.invalidShortName(group.getName(), groups, group.getId());
 			if (reason != null) {
-				problems.add("Nom court du groupe d'id " + group.getId() + " invalide (« " + group.getName() + " ») : " + reason + ".");
+				problems.add(new Problem(Section.GROUPS, Messages.get("gui.config.problem.shortName", group.getId(), group.getName(), reason)));
 			}
 		}
 		return problems;
@@ -185,8 +194,7 @@ final class ConfigForm {
 					// casse seule : les fichiers existants restent trouvés (partage Windows insensible à la casse)
 					.filter(g -> g.getId().equals(id) && !g.getName().equalsIgnoreCase(oldName))
 					.findAny()
-					.ifPresent(g -> notes.add("Le nom court « " + oldName + " » devient « " + g.getName() + " » : les fichiers @" + oldName
-							+ ".synoRight existants ne seront plus pris en compte (« Photos → fichiers » recrée les nouveaux)."));
+					.ifPresent(g -> notes.add(Messages.get("gui.config.note.renamed", oldName, g.getName())));
 		}
 		return notes;
 	}
@@ -209,6 +217,7 @@ final class ConfigForm {
 		pref.setMenuEntries(true, modernMenuEntries);
 		pref.setMenuEntries(false, classicMenuEntries);
 		pref.setMenuTarget(menuTarget);
+		pref.setLanguageSetting(language);
 		return pref;
 	}
 
@@ -234,6 +243,6 @@ final class ConfigForm {
 		return new State(normalizedUrl(), user, password, storePassword, folder,
 				// ordre indifférent : les cases suivent l'ordre du NAS, la configuration le sien
 				groups.stream().map(g -> g.getId() + ":" + g.getName()).sorted().toList(),
-				List.copyOf(modernMenuEntries), List.copyOf(classicMenuEntries), menuTarget, fingerprint);
+				List.copyOf(modernMenuEntries), List.copyOf(classicMenuEntries), menuTarget, fingerprint, language);
 	}
 }

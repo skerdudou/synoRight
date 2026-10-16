@@ -4,14 +4,14 @@ import java.awt.Component;
 
 import javax.swing.JOptionPane;
 
+import sk.synoAdmin.i18n.Messages;
+
 /**
  * Garde de fermeture d'une fenêtre : tant qu'une écriture est en cours, la fermeture est refusée
  * (fermer tuerait l'opération à mi-chemin). Les chargements et analyses, eux, restent annulables.
  * Sur l'EDT uniquement.
  */
 final class CloseGuard {
-
-	static final String BUSY_MESSAGE = "Opération en cours, veuillez patienter.";
 
 	private int writes;
 
@@ -51,6 +51,6 @@ final class CloseGuard {
 	}
 
 	private static void notifyBusy(final Component parent) {
-		JOptionPane.showMessageDialog(parent, BUSY_MESSAGE, Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+		JOptionPane.showMessageDialog(parent, Messages.get("gui.busy"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 	}
 }

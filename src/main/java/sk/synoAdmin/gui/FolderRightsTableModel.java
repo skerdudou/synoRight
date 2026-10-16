@@ -8,13 +8,14 @@ import javax.swing.table.AbstractTableModel;
 
 import sk.synoAdmin.engine.FolderRights;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.i18n.Messages;
 
 /**
  * Modèle du tableau des droits d'un dossier : case « Autorisé » éditable, état Photos et fichier en lecture seule.
  */
 final class FolderRightsTableModel extends AbstractTableModel {
 
-	private static final String[] COLUMNS = { "Autorisé", "Groupe", "Synology Photos", "Fichier" };
+	private static final int COLUMN_COUNT = 4;
 
 	private final List<FolderRights.GroupRight> rights;
 	private final boolean[] wanted;
@@ -34,12 +35,17 @@ final class FolderRightsTableModel extends AbstractTableModel {
 
 	@Override
 	public int getColumnCount() {
-		return COLUMNS.length;
+		return COLUMN_COUNT;
 	}
 
 	@Override
 	public String getColumnName(final int column) {
-		return COLUMNS[column];
+		return switch (column) {
+			case 0 -> Messages.get("gui.column.allowed");
+			case 1 -> Messages.get("gui.column.group");
+			case 2 -> "Synology Photos";
+			default -> Messages.get("gui.column.file");
+		};
 	}
 
 	@Override
@@ -58,9 +64,13 @@ final class FolderRightsTableModel extends AbstractTableModel {
 		return switch (column) {
 			case 0 -> wanted[row];
 			case 1 -> right.group().getName();
-			case 2 -> right.inPhotos() ? "oui" : "non";
-			default -> right.inFile() ? "oui" : "non";
+			case 2 -> yesNo(right.inPhotos());
+			default -> yesNo(right.inFile());
 		};
+	}
+
+	static String yesNo(final boolean value) {
+		return Messages.get(value ? "cli.report.yes" : "cli.report.no");
 	}
 
 	@Override

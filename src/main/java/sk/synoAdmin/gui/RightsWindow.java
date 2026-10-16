@@ -20,6 +20,7 @@ import javax.swing.WindowConstants;
 import javax.swing.table.DefaultTableCellRenderer;
 
 import sk.synoAdmin.engine.RightEngine;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
@@ -35,16 +36,16 @@ final class RightsWindow {
 	static JFrame create(final Preferences pref, final String folder) {
 		new RightEngine(pref).checkFolder(folder); // avant toute connexion : erreur immédiate si hors du dossier photos
 
-		final JFrame frame = new JFrame("Droits du dossier — " + Gui.TITLE);
+		final JFrame frame = new JFrame(Messages.get("gui.rights.windowTitle", Gui.TITLE));
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // fermeture via la garde, toujours terminée par dispose()
 		final CloseGuard guard = new CloseGuard();
-		final JLabel title = new JLabel("Chargement des droits…");
+		final JLabel title = new JLabel(Messages.get("gui.rights.loading"));
 		title.putClientProperty("FlatLaf.styleClass", "h3");
 		final JTable table = new JTable();
 		table.setDefaultRenderer(Object.class, new GapRenderer());
-		final JLabel note = new JLabel("Ajouter un groupe sur un sous-dossier le donne aussi au dossier parent.");
-		final JButton apply = new JButton("Appliquer");
-		final JButton close = new JButton("Fermer");
+		final JLabel note = new JLabel(Messages.get("gui.rights.note"));
+		final JButton apply = new JButton(Messages.get("gui.rights.apply"));
+		final JButton close = new JButton(Messages.get("gui.common.close"));
 		apply.setEnabled(false);
 		close.addActionListener(e -> guard.close(frame));
 
@@ -68,7 +69,7 @@ final class RightsWindow {
 			engine.login();
 			return engine.folderRights(folder);
 		}, rights -> {
-			title.setText("Dossier " + rights.folderName());
+			title.setText(Messages.get("gui.rights.folder", rights.folderName()));
 			final FolderRightsTableModel model = new FolderRightsTableModel(rights);
 			table.setModel(model);
 			apply.setEnabled(model.hasPendingChanges());

@@ -28,6 +28,43 @@ class ConfigFormTest {
 		}
 	}
 
+	private static List<String> messages(final ConfigForm form) {
+		return form.validate().stream().map(ConfigForm.Problem::message).toList();
+	}
+
+	private static List<ConfigForm.Section> sections(final ConfigForm form) {
+		return form.validate().stream().map(ConfigForm.Problem::section).toList();
+	}
+
+	@Test
+	void langue_modifiee_etatModifieEtEnregistree(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd", List.of(new Group("3", "famille")), false);
+		final ConfigForm form = ConfigForm.from(pref);
+		assertEquals("auto", form.language);
+		assertFalse(form.isDirty());
+
+		form.language = "fr";
+
+		assertTrue(form.isDirty());
+		assertTrue(form.validate().isEmpty());
+		assertEquals("fr", form.toPreferences(dir, false).getLanguageSetting());
+
+		form.language = "auto";
+		assertFalse(form.isDirty());
+	}
+
+	@Test
+	void langue_reprendLaConfiguration(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd", List.of(new Group("3", "famille")), false);
+		pref.setLanguageSetting("de");
+
+		final ConfigForm form = ConfigForm.from(pref);
+
+		assertEquals("de", form.language);
+		assertFalse(form.isDirty());
+		assertEquals("auto", ConfigForm.from(null).language);
+	}
+
 	@Test
 	void nouvelleConfiguration_connexionEtGroupesObligatoires(@TempDir final Path dir) throws IOException {
 		final ConfigForm form = ConfigForm.from(null);
@@ -35,7 +72,8 @@ class ConfigFormTest {
 		form.user = "admin";
 		form.folder = dir.toString();
 
-		assertEquals(List.of("Tester la connexion au NAS.", "Choisir au moins un groupe."), form.validate());
+		assertEquals(List.of("Test the connection to the NAS.", "Select at least one group."), messages(form));
+		assertEquals(List.of(ConfigForm.Section.CONNECTION, ConfigForm.Section.GROUPS), sections(form));
 	}
 
 	@Test
@@ -49,14 +87,18 @@ class ConfigFormTest {
 		form.user = "autre";
 		assertTrue(form.isDirty());
 		assertTrue(form.connectionChanged());
-		assertEquals(List.of("Tester la connexion au NAS."), form.validate());
+		assertEquals(List.of("Test the connection to the NAS."), messages(form));
+		assertEquals(List.of(ConfigForm.Section.CONNECTION), sections(form));
 	}
 
 	@Test
 	void dossierInaccessible_signale(@TempDir final Path dir) {
 		final Preferences pref = new Preferences(dir, dir.resolve("absent").toString(), "https://nas", "admin", "pwd", List.of(new Group("3", "famille")), false);
 
-		assertEquals(List.of("Dossier des photos introuvable ou inaccessible."), ConfigForm.from(pref).validate());
+		final ConfigForm form = ConfigForm.from(pref);
+
+		assertEquals(List.of("Photo folder not found or not accessible."), messages(form));
+		assertEquals(List.of(ConfigForm.Section.FOLDER), sections(form));
 	}
 
 	@Test
@@ -96,8 +138,9 @@ class ConfigFormTest {
 
 		form.groups = List.of(new Group("65536", "Kerdudou"), new Group("65537", "kerdudou"));
 
-		assertEquals(List.of("Nom court du groupe d'id 65537 invalide (« kerdudou ») : already used by another group."),
-				form.validate().stream().filter(p -> p.contains("65537")).toList());
+		assertEquals(List.of("Short name of the group with id 65537 is invalid (\"kerdudou\"): already used by another group."),
+				messages(form).stream().filter(p -> p.contains("65537")).toList());
+		assertTrue(form.validate().stream().allMatch(p -> p.section() == ConfigForm.Section.GROUPS));
 	}
 
 	@Test

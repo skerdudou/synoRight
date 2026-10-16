@@ -37,6 +37,7 @@ import com.formdev.flatlaf.FlatLightLaf;
 
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.ProcessRunner;
 
 /**
@@ -56,7 +57,7 @@ public final class Gui {
 	/** Thème FlatLaf (clair ou sombre comme Windows) et dialogues pour les saisies. */
 	public static void setup() {
 		if (GraphicsEnvironment.isHeadless()) {
-			throw new UserException("Pas d'affichage graphique disponible : utiliser les commandes en console (synoRight --help).");
+			throw new UserException(Messages.get("gui.noDisplay"));
 		}
 		if (windowsDarkTheme()) {
 			FlatDarkLaf.setup();
@@ -129,7 +130,7 @@ public final class Gui {
 			throw new RuntimeException(e.getCause());
 		} catch (final InterruptedException e) {
 			Thread.currentThread().interrupt();
-			throw new UserException("Saisie annulée.");
+			throw new UserException(Messages.get("ui.input.cancelled"));
 		}
 		return result.get();
 	}
@@ -232,7 +233,7 @@ public final class Gui {
 			JOptionPane.showMessageDialog(parent, e.getMessage(), TITLE, JOptionPane.ERROR_MESSAGE);
 			return;
 		}
-		showError(parent, "Erreur inattendue : " + e, e);
+		showError(parent, Messages.get("main.error.unexpected", e), e);
 	}
 
 	static void showError(final Component parent, final String message, final Throwable detail) {
@@ -246,7 +247,7 @@ public final class Gui {
 		area.setEditable(false);
 		final JScrollPane details = new JScrollPane(area);
 		details.setVisible(false);
-		final JCheckBox toggle = new JCheckBox("Afficher le détail");
+		final JCheckBox toggle = new JCheckBox(Messages.get("gui.common.showDetails"));
 		final JPanel panel = new JPanel(new BorderLayout(0, 8));
 		panel.add(new JLabel(message), BorderLayout.NORTH);
 		panel.add(toggle, BorderLayout.CENTER);

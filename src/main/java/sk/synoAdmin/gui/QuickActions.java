@@ -8,6 +8,7 @@ import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.RightEngine;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
@@ -44,12 +45,12 @@ final class QuickActions {
 		engine.login();
 		final String url = photosFolderUrl(pref.getUrl(), engine.folderId(folder));
 		if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-			throw new UserException("Impossible d'ouvrir le navigateur : " + url);
+			throw new UserException(Messages.get("gui.common.browserFailed", url));
 		}
 		try {
 			Desktop.getDesktop().browse(URI.create(url));
 		} catch (final IOException e) {
-			throw new UserException("Impossible d'ouvrir le navigateur : " + url, e);
+			throw new UserException(Messages.get("gui.common.browserFailed", url), e);
 		}
 	}
 

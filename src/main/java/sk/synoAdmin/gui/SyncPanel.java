@@ -21,6 +21,7 @@ import javax.swing.WindowConstants;
 
 import sk.synoAdmin.engine.RightEngine;
 import sk.synoAdmin.engine.SyncPlan;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
@@ -39,10 +40,10 @@ final class SyncPanel extends JPanel {
 
 	private final Supplier<Preferences> prefs;
 	private final TaskRunner runner;
-	private final JButton analyseButton = new JButton("Analyser");
-	private final JButton pushButton = new JButton("Fichiers → Photos");
-	private final JButton pullButton = new JButton("Photos → fichiers");
-	private final JLabel summary = new JLabel("Cliquez sur Analyser pour comparer les fichiers et Synology Photos.");
+	private final JButton analyseButton = new JButton(Messages.get("gui.sync.analyze"));
+	private final JButton pushButton = new JButton(Messages.get("gui.sync.push"));
+	private final JButton pullButton = new JButton(Messages.get("gui.sync.pull"));
+	private final JLabel summary = new JLabel(Messages.get("gui.sync.hint"));
 	private final JLabel warnings = new JLabel();
 	private final JTable table = new JTable();
 	private final CloseGuard closeGuard = new CloseGuard();
@@ -76,7 +77,7 @@ final class SyncPanel extends JPanel {
 		top.add(summary, BorderLayout.CENTER);
 		top.add(analyseButton, BorderLayout.EAST);
 
-		final JLabel help = new JLabel("Fichiers → Photos retire aussi les droits hérités du dossier parent par les nouveaux dossiers.");
+		final JLabel help = new JLabel(Messages.get("gui.sync.pushNote"));
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		buttons.add(pushButton);
 		buttons.add(pullButton);
@@ -149,16 +150,16 @@ final class SyncPanel extends JPanel {
 		final SyncPlan push = result.push();
 		table.setModel(new SyncTableModel(push));
 		if (push.isEmpty() && result.pull().isEmpty()) {
-			summary.setText("Fichiers et Synology Photos sont synchronisés (" + push.folderCount() + " dossiers).");
+			summary.setText(Messages.get("gui.sync.synchronized", push.folderCount()));
 		} else {
-			summary.setText(push.changeCount() + " écart(s) sur " + push.folderCount() + " dossiers.");
+			summary.setText(Messages.get("gui.sync.gaps", push.changeCount(), push.folderCount()));
 		}
 		final List<String> lines = new ArrayList<>();
 		if (!push.unindexedFolders().isEmpty()) {
-			lines.add("Dossiers pas encore indexés par Synology Photos (ignorés) : " + String.join(", ", push.unindexedFolders()));
+			lines.add(Messages.get("gui.sync.unindexed", String.join(", ", push.unindexedFolders())));
 		}
 		if (!push.unknownFolders().isEmpty()) {
-			lines.add("Dossiers connus de Synology Photos mais absents du partage (ignorés) : " + String.join(", ", push.unknownFolders()));
+			lines.add(Messages.get("gui.sync.unknown", String.join(", ", push.unknownFolders())));
 		}
 		warnings.setText(lines.isEmpty() ? "" : "<html>" + String.join("<br>", lines.stream().map(SyncPanel::escape).toList()) + "</html>");
 		pushButton.setEnabled(!push.isEmpty());
@@ -171,23 +172,23 @@ final class SyncPanel extends JPanel {
 
 	private void applyPush() {
 		final Analysis current = analysis;
-		if (current != null && Gui.confirm(this, "Appliquer " + current.push().changeCount() + " modification(s) dans Synology Photos ?")) {
+		if (current != null && Gui.confirm(this, Messages.get("gui.sync.confirmPush", current.push().changeCount()))) {
 			apply(() -> current.engine().apply(current.push()),
-					n -> JOptionPane.showMessageDialog(this, "Droits Synology Photos mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE));
+					n -> JOptionPane.showMessageDialog(this, Messages.get("cli.report.donePush"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE));
 		}
 	}
 
 	private void applyPull() {
 		final Analysis current = analysis;
-		if (current != null && Gui.confirm(this, "Appliquer " + current.pull().changeCount() + " modification(s) dans les fichiers de droits ?")) {
+		if (current != null && Gui.confirm(this, Messages.get("gui.sync.confirmPull", current.pull().changeCount()))) {
 			apply(() -> current.engine().apply(current.pull()),
-					n -> JOptionPane.showMessageDialog(this, n + " fichier(s) de droits mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE));
+					n -> JOptionPane.showMessageDialog(this, Messages.get("gui.sync.donePull", n), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE));
 		}
 	}
 
 	/** Construit la fenêtre autonome (sur l'EDT, sans accès réseau) ; l'analyse démarre à l'ouverture. */
 	static JFrame createWindow(final Preferences pref, final SyncPlan.Direction direction) {
-		final JFrame frame = new JFrame("Synchronisation — " + Gui.TITLE);
+		final JFrame frame = new JFrame(Messages.get("gui.sync.windowTitle", Gui.TITLE));
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // fermeture via la garde, toujours terminée par dispose()
 		final SyncPanel panel = new SyncPanel(() -> pref, direction);
 		frame.setContentPane(panel);

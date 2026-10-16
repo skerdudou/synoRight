@@ -34,6 +34,7 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListSelectionModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -57,6 +58,8 @@ import sk.synoAdmin.cli.SynoRightCommand;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.GroupChecks;
 import sk.synoAdmin.engine.SyncPlan;
+import sk.synoAdmin.i18n.Language;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.menu.MenuTarget;
@@ -73,11 +76,15 @@ import sk.synoAdmin.synology.SynoGroup;
  */
 final class ConfigWindow {
 
-	private static final String[] SECTIONS = { "Connexion", "Dossier photos", "Groupes", "Menu Explorateur", "Synchronisation" };
 	private static final int CONNECTION = 0;
 	private static final int FOLDER = 1;
 	private static final int GROUPS = 2;
+	private static final int MENU = 3;
 	private static final int SYNC = 4;
+
+	/** Noms de la liste des sections, dans l'ordre des index ci-dessus (nom = identifiant de la carte). */
+	private final String[] sections = { Messages.get("gui.config.section.connection"), Messages.get("gui.config.section.folder"),
+			Messages.get("gui.config.section.groups"), Messages.get("gui.config.section.menu"), Messages.get("gui.config.section.sync") };
 
 	/** Paramètres d'un test de connexion, relevés sur l'EDT. */
 	private record ConnectionParams(String url, String user, String password, boolean passwordFromConfig, boolean sameAccount,
@@ -107,9 +114,9 @@ final class ConfigWindow {
 
 	private final Path configDir;
 	private final boolean verbose;
-	private final JFrame frame = new JFrame("Configuration — " + Gui.TITLE);
-	private final boolean[] enabledSections = new boolean[SECTIONS.length];
-	private final JList<String> sectionList = new JList<>(SECTIONS);
+	private final JFrame frame = new JFrame(Messages.get("gui.config.windowTitle", Gui.TITLE));
+	private final boolean[] enabledSections = new boolean[sections.length];
+	private final JList<String> sectionList = new JList<>(sections);
 	private final CardLayout cards = new CardLayout();
 	private final JPanel cardPanel = new JPanel(cards);
 	private final Deque<Runnable> pending = new ArrayDeque<>();
@@ -126,7 +133,7 @@ final class ConfigWindow {
 	private final JTextField userField = new JTextField(20);
 	private final JPasswordField passwordField = new JPasswordField(20);
 	private final JLabel passwordHint = new JLabel(" ");
-	private final JCheckBox storePasswordBox = new JCheckBox("Mémoriser le mot de passe");
+	private final JCheckBox storePasswordBox = new JCheckBox(Messages.get("gui.config.connection.storePassword"));
 	private final JLabel connectionStatus = new JLabel(" ");
 	private String connectionMessage = " ";
 	/** Configuration existante illisible : signalée en tête de la section Connexion. */
@@ -148,7 +155,7 @@ final class ConfigWindow {
 	private final Map<MenuEntry, JCheckBox> classicEntryBoxes = new EnumMap<>(MenuEntry.class);
 	private final Map<MenuTarget, JRadioButton> targetButtons = new EnumMap<>(MenuTarget.class);
 	private final JLabel menuAvailability = new JLabel(" ");
-	private final JLabel menuStatus = new JLabel("Installé : vérification…");
+	private final JLabel menuStatus = new JLabel(Messages.get("gui.config.menu.checking"));
 	private ModernMenuInstaller.Availability availability;
 
 	private ConfigWindow(final Path configDir) {
@@ -178,7 +185,7 @@ final class ConfigWindow {
 		try {
 			return Preferences.fromFile(configDir);
 		} catch (final UserException e) {
-			unreadableConfig = "Configuration existante illisible (" + e.getMessage() + ") : elle sera remplacée.";
+			unreadableConfig = Messages.get("cli.init.unreadable", e.getMessage());
 			return null;
 		}
 	}
@@ -199,12 +206,12 @@ final class ConfigWindow {
 			}
 		});
 
-		cardPanel.add(connectionSection(), SECTIONS[CONNECTION]);
-		cardPanel.add(folderSection(), SECTIONS[FOLDER]);
-		cardPanel.add(groupsSection(), SECTIONS[GROUPS]);
-		cardPanel.add(menuSection(), SECTIONS[3]);
+		cardPanel.add(connectionSection(), sections[CONNECTION]);
+		cardPanel.add(folderSection(), sections[FOLDER]);
+		cardPanel.add(groupsSection(), sections[GROUPS]);
+		cardPanel.add(menuSection(), sections[MENU]);
 		// tâches de la synchronisation dans la file de la fenêtre : jamais pendant un enregistrement ou une installation
-		cardPanel.add(new SyncPanel(() -> saved, SyncPlan.Direction.PUSH, this::queue), SECTIONS[SYNC]);
+		cardPanel.add(new SyncPanel(() -> saved, SyncPlan.Direction.PUSH, this::queue), sections[SYNC]);
 
 		// sections indisponibles : grisées et non sélectionnables
 		sectionList.setSelectionModel(new DefaultListSelectionModel() {
@@ -234,7 +241,7 @@ final class ConfigWindow {
 		sectionList.addListSelectionListener(e -> {
 			final int index = sectionList.getSelectedIndex();
 			if (index >= 0) {
-				cards.show(cardPanel, SECTIONS[index]);
+				cards.show(cardPanel, sections[index]);
 			}
 		});
 		enabledSections[CONNECTION] = true;
@@ -253,13 +260,13 @@ final class ConfigWindow {
 	}
 
 	private JPanel bottomBar() {
-		final JButton save = new JButton("Enregistrer");
+		final JButton save = new JButton(Messages.get("gui.config.save"));
 		save.addActionListener(e -> save(true, null));
-		final JButton close = new JButton("Fermer");
+		final JButton close = new JButton(Messages.get("gui.common.close"));
 		close.addActionListener(e -> close());
 		frame.getRootPane().setDefaultButton(save);
 
-		final JButton openDir = new JButton("Ouvrir le dossier de configuration");
+		final JButton openDir = new JButton(Messages.get("gui.config.openDir"));
 		openDir.putClientProperty("JButton.buttonType", "borderless");
 		openDir.addActionListener(e -> openConfigDir());
 		final JLabel version = new JLabel(new SynoRightCommand.VersionProvider().getVersion()[0]);
@@ -267,6 +274,8 @@ final class ConfigWindow {
 
 		final JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
 		left.add(openDir);
+		left.add(new JLabel(Messages.get("gui.config.language.label")));
+		left.add(languageBox());
 		left.add(version);
 		final JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		right.add(save);
@@ -277,13 +286,48 @@ final class ConfigWindow {
 		return bar;
 	}
 
+	/** Langue proposée : code du réglage ("auto" ou code de langue) et libellé affiché. */
+	private record LanguageChoice(String code, String label) {
+		@Override
+		public String toString() {
+			return label;
+		}
+	}
+
+	/** Choix de la langue : automatique (traduit), puis les langues par leur nom natif (non traduit). */
+	private JComboBox<LanguageChoice> languageBox() {
+		final JComboBox<LanguageChoice> box = new JComboBox<>();
+		box.addItem(new LanguageChoice(Preferences.LANGUAGE_AUTO, Messages.get("gui.config.language.auto")));
+		for (final Language language : Language.values()) {
+			box.addItem(new LanguageChoice(language.code(), nativeName(language)));
+		}
+		for (int i = 0; i < box.getItemCount(); i++) {
+			if (box.getItemAt(i).code().equals(form.language)) {
+				box.setSelectedIndex(i);
+			}
+		}
+		box.addActionListener(e -> form.language = ((LanguageChoice) box.getSelectedItem()).code());
+		return box;
+	}
+
+	/** Nom d'une langue dans cette langue (jamais traduit). */
+	private static String nativeName(final Language language) {
+		return switch (language) {
+			case EN -> "English";
+			case FR -> "Français";
+			case DE -> "Deutsch";
+			case ES -> "Español";
+			case IT -> "Italiano";
+		};
+	}
+
 	/** À l'ouverture : test de connexion automatique (configuration existante) et état du menu, en arrière-plan. */
 	private void startup() {
 		if (form.isExisting()) {
 			if (form.hasStoredPassword()) {
 				autoTest();
 			} else {
-				connectionMessage = "Mot de passe non mémorisé : cliquer sur « Tester la connexion » pour charger les groupes du NAS.";
+				connectionMessage = Messages.get("gui.config.passwordNotStoredHint");
 				refreshConnectionStatus();
 			}
 		}
@@ -293,10 +337,10 @@ final class ConfigWindow {
 	private void close() {
 		if (busy) {
 			// fermer tuerait l'opération en cours (écriture de la configuration, installation du menu…)
-			JOptionPane.showMessageDialog(frame, "Opération en cours, veuillez patienter.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			JOptionPane.showMessageDialog(frame, Messages.get("gui.busy"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
-		if (form.isDirty() && !Gui.confirm(frame, "Quitter sans enregistrer les modifications ?")) {
+		if (form.isDirty() && !Gui.confirm(frame, Messages.get("gui.config.quitConfirm"))) {
 			return;
 		}
 		pending.clear();
@@ -322,7 +366,7 @@ final class ConfigWindow {
 
 	private void openConfigDir() {
 		if (!Files.isDirectory(configDir)) {
-			JOptionPane.showMessageDialog(frame, "Le dossier de configuration sera créé à l'enregistrement :\n" + configDir,
+			JOptionPane.showMessageDialog(frame, Messages.get("gui.config.dirWillBeCreated", configDir),
 					Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -330,7 +374,7 @@ final class ConfigWindow {
 			try {
 				Desktop.getDesktop().open(configDir.toFile());
 			} catch (final IOException | UnsupportedOperationException e) {
-				throw new UserException("Impossible d'ouvrir le dossier " + configDir + " : " + e.getMessage(), e);
+				throw new UserException(Messages.get("gui.config.openDirFailed", configDir, e.getMessage()), e);
 			}
 			return null;
 		}, r -> {
@@ -394,7 +438,7 @@ final class ConfigWindow {
 		urlField.setText(form.url);
 		userField.setText(form.user);
 		storePasswordBox.setSelected(form.storePassword);
-		final JButton testButton = new JButton("Tester la connexion");
+		final JButton testButton = new JButton(Messages.get("gui.config.connection.test"));
 		testButton.addActionListener(e -> manualTest());
 
 		onChange(urlField, () -> {
@@ -415,23 +459,23 @@ final class ConfigWindow {
 		if (unreadableConfig != null) {
 			addRow(grid, 0, null, new JLabel(html(unreadableConfig)));
 		}
-		addRow(grid, 1, "URL de DSM :", urlField);
-		addRow(grid, 2, "Compte :", userField);
-		addRow(grid, 3, "Mot de passe :", passwordField);
+		addRow(grid, 1, Messages.get("gui.config.connection.url"), urlField);
+		addRow(grid, 2, Messages.get("gui.config.connection.user"), userField);
+		addRow(grid, 3, Messages.get("gui.config.connection.password"), passwordField);
 		addRow(grid, 4, null, passwordHint);
 		addRow(grid, 5, null, storePasswordBox);
 		addRow(grid, 6, null, leftFlow(testButton));
 		addRow(grid, 7, null, connectionStatus);
-		return section("Connexion au NAS", "URL de DSM (ex : https://nas.example.com:5001) et compte administrateur de Synology Photos.", grid);
+		return section(Messages.get("gui.config.connection.title"), Messages.get("gui.config.connection.description"), grid);
 	}
 
 	private void refreshConnectionStatus() {
-		connectionStatus.setText(form.connectionVerified() ? html(connectionMessage) : "Tester la connexion pour valider ces paramètres.");
+		connectionStatus.setText(form.connectionVerified() ? html(connectionMessage) : Messages.get("gui.config.connection.needTest"));
 	}
 
 	private void refreshPasswordHint() {
-		passwordHint.setText(form.hasStoredPassword() ? "Laisser vide pour conserver le mot de passe actuel."
-				: form.isExisting() ? "Mot de passe non mémorisé dans la configuration." : " ");
+		passwordHint.setText(form.hasStoredPassword() ? Messages.get("gui.config.connection.keepPassword")
+				: form.isExisting() ? Messages.get("gui.config.connection.passwordNotStored") : " ");
 	}
 
 	private ConnectionParams connectionParams() {
@@ -451,13 +495,13 @@ final class ConfigWindow {
 
 	private void manualTest() {
 		if (form.url.isBlank() || form.user.isBlank()) {
-			JOptionPane.showMessageDialog(frame, "Saisir l'URL de DSM et le compte.", Gui.TITLE, JOptionPane.WARNING_MESSAGE);
+			JOptionPane.showMessageDialog(frame, Messages.get("gui.config.connection.enterUrlUser"), Gui.TITLE, JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		final ConnectionParams params = connectionParams();
-		connectionStatus.setText("Test de la connexion…");
+		connectionStatus.setText(Messages.get("gui.config.connection.testing"));
 		async(() -> connect(params), this::connected, () -> {
-			connectionMessage = "Échec de la connexion.";
+			connectionMessage = Messages.get("gui.config.connection.failed");
 			refreshConnectionStatus();
 		});
 	}
@@ -465,7 +509,7 @@ final class ConfigWindow {
 	/** Test automatique d'une configuration existante : un échec est signalé dans la section, sans dialogue bloquant. */
 	private void autoTest() {
 		final ConnectionParams params = connectionParams();
-		connectionStatus.setText("Test de la connexion…");
+		connectionStatus.setText(Messages.get("gui.config.connection.testing"));
 		async(() -> {
 			try {
 				return new AutoTest(connect(params), null);
@@ -477,7 +521,7 @@ final class ConfigWindow {
 				connected(outcome.connected());
 			} else {
 				final RuntimeException e = outcome.error();
-				connectionMessage = "Échec de la connexion : " + (e.getMessage() != null ? e.getMessage() : e.toString());
+				connectionMessage = Messages.get("gui.config.connection.failedWith", e.getMessage() != null ? e.getMessage() : e.toString());
 				refreshConnectionStatus();
 			}
 		}, () -> {
@@ -488,7 +532,7 @@ final class ConfigWindow {
 	private void connected(final Connected connection) {
 		form.connected(connection.result());
 		nasGroups = connection.groups();
-		connectionMessage = "Connexion OK.";
+		connectionMessage = Messages.get("cli.init.connected");
 		refreshConnectionStatus();
 		rebuildGroups();
 		updateSections();
@@ -503,22 +547,22 @@ final class ConfigWindow {
 			folderStatus.setText(" ");
 			folderTimer.restart();
 		});
-		final JButton browse = new JButton("Parcourir…");
+		final JButton browse = new JButton(Messages.get("gui.config.folder.browse"));
 		browse.addActionListener(e -> browseFolder());
 
 		final JPanel line = new JPanel(new BorderLayout(8, 0));
 		line.add(folderField, BorderLayout.CENTER);
 		line.add(browse, BorderLayout.EAST);
 		final JPanel grid = new JPanel(new GridBagLayout());
-		addRow(grid, 0, "Dossier :", line);
+		addRow(grid, 0, Messages.get("gui.config.folder.label"), line);
 		addRow(grid, 1, null, folderStatus);
-		return section("Dossier photos", "Dossier des photos sur le NAS, vu depuis ce poste (ex : \\\\NAS\\photo).", grid);
+		return section(Messages.get("gui.config.section.folder"), Messages.get("gui.config.folder.description"), grid);
 	}
 
 	private void browseFolder() {
 		final JFileChooser chooser = new JFileChooser();
 		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-		chooser.setDialogTitle("Dossier des photos");
+		chooser.setDialogTitle(Messages.get("gui.config.folder.chooserTitle"));
 		if (!form.folder.isBlank()) {
 			chooser.setCurrentDirectory(new File(form.folder));
 		}
@@ -547,8 +591,8 @@ final class ConfigWindow {
 				} catch (final Exception e) {
 					accessible = false;
 				}
-				folderStatus.setText(folder.isBlank() ? "Indiquer le dossier des photos."
-						: accessible ? "Dossier accessible." : "Dossier introuvable ou inaccessible.");
+				folderStatus.setText(folder.isBlank() ? Messages.get("gui.config.folder.enter")
+						: accessible ? Messages.get("gui.config.folder.accessible") : Messages.get("gui.config.folder.inaccessible"));
 			}
 		}.execute();
 	}
@@ -565,8 +609,7 @@ final class ConfigWindow {
 		final JPanel boxesTop = new JPanel(new BorderLayout());
 		boxesTop.add(groupBoxes, BorderLayout.NORTH);
 		content.add(new JScrollPane(boxesTop), BorderLayout.CENTER);
-		final JPanel section = section("Groupes", "Groupes du NAS dont les droits sont gérés. Le nom court (par défaut le nom du groupe)"
-				+ " donne le nom des fichiers @<nom court>.synoRight et des entrées du menu.", null);
+		final JPanel section = section(Messages.get("gui.config.section.groups"), Messages.get("gui.config.groups.description"), null);
 		section.add(content, BorderLayout.CENTER);
 		return section;
 	}
@@ -576,10 +619,10 @@ final class ConfigWindow {
 		groupBoxes.removeAll();
 		groupChoices.clear();
 		if (nasGroups == null) {
-			groupHint.setText("Tester la connexion pour modifier les groupes.");
+			groupHint.setText(Messages.get("gui.config.groups.connectFirst"));
 			int row = 0;
 			for (final Group group : form.groups) {
-				final JCheckBox box = new JCheckBox("Groupe d'id " + group.getId(), true);
+				final JCheckBox box = new JCheckBox(Messages.get("gui.config.groups.byId", group.getId()), true);
 				box.setEnabled(false);
 				final JTextField shortName = new JTextField(group.getName(), 16);
 				shortName.setEnabled(false);
@@ -587,7 +630,7 @@ final class ConfigWindow {
 			}
 			groupWarnings.setText("");
 		} else {
-			groupHint.setText(nasGroups.isEmpty() ? "Aucun groupe local trouvé sur le NAS : en créer un dans DSM." : "Groupes à gérer :");
+			groupHint.setText(nasGroups.isEmpty() ? Messages.get("gui.config.groups.none") : Messages.get("gui.config.groups.toManage"));
 			for (final SynoGroup nasGroup : nasGroups) {
 				final String id = String.valueOf(nasGroup.gid());
 				final Optional<Group> configured = form.groups.stream().filter(g -> g.getId().equals(id)).findAny();
@@ -596,7 +639,7 @@ final class ConfigWindow {
 			}
 			for (final Group group : form.groups) {
 				if (nasGroups.stream().noneMatch(g -> String.valueOf(g.gid()).equals(group.getId()))) {
-					addGroupChoice(group.getId(), "Groupe d'id " + group.getId() + " (absent du NAS)", group.getName(), true);
+					addGroupChoice(group.getId(), Messages.get("gui.config.groups.absent", group.getId()), group.getName(), true);
 				}
 			}
 			refreshGroupWarnings();
@@ -626,7 +669,7 @@ final class ConfigWindow {
 		c.gridx = 0;
 		groupBoxes.add(box, c);
 		c.gridx = 1;
-		groupBoxes.add(new JLabel("Nom court :"), c);
+		groupBoxes.add(new JLabel(Messages.get("gui.config.groups.shortName")), c);
 		c.gridx = 2;
 		c.weightx = 1;
 		groupBoxes.add(shortName, c);
@@ -646,7 +689,7 @@ final class ConfigWindow {
 		for (final Group group : form.groups) {
 			final String reason = GroupChecks.invalidShortName(group.getName(), form.groups, group.getId());
 			if (reason != null) {
-				warnings.add("Nom court « " + group.getName() + " » invalide : " + reason + ".");
+				warnings.add(Messages.get("gui.config.groups.invalidShortName", group.getName(), reason));
 			}
 		}
 		warnings.addAll(form.renamedGroupNotes());
@@ -659,7 +702,7 @@ final class ConfigWindow {
 	private JPanel menuSection() {
 		// une ligne par entrée, une colonne par menu : les deux menus peuvent proposer des entrées différentes
 		final JPanel entries = new JPanel(new GridBagLayout());
-		entries.setBorder(BorderFactory.createTitledBorder("Entrées du menu"));
+		entries.setBorder(BorderFactory.createTitledBorder(Messages.get("gui.config.menu.entries")));
 		final GridBagConstraints c = new GridBagConstraints();
 		c.insets = new Insets(2, 0, 2, 16);
 		c.anchor = GridBagConstraints.LINE_START;
@@ -667,7 +710,7 @@ final class ConfigWindow {
 		c.gridx = 1;
 		entries.add(new JLabel("Windows 11"), c);
 		c.gridx = 2;
-		entries.add(new JLabel("Classique"), c);
+		entries.add(new JLabel(Messages.get("gui.config.menu.columnClassic")), c);
 		for (final MenuEntry entry : MenuEntry.values()) {
 			c.gridy++;
 			c.gridx = 0;
@@ -680,19 +723,19 @@ final class ConfigWindow {
 
 		final JPanel targets = new JPanel();
 		targets.setLayout(new BoxLayout(targets, BoxLayout.Y_AXIS));
-		targets.setBorder(BorderFactory.createTitledBorder("Menu à installer"));
+		targets.setBorder(BorderFactory.createTitledBorder(Messages.get("gui.config.menu.target")));
 		final ButtonGroup group = new ButtonGroup();
-		addTarget(targets, group, MenuTarget.MODERN, "Windows 11 (menu principal)");
-		addTarget(targets, group, MenuTarget.CLASSIC, "Menu classique (Afficher plus d'options)");
-		addTarget(targets, group, MenuTarget.ALL, "Les deux");
+		addTarget(targets, group, MenuTarget.MODERN, Messages.get("gui.config.menu.targetModern"));
+		addTarget(targets, group, MenuTarget.CLASSIC, Messages.get("gui.config.menu.targetClassic"));
+		addTarget(targets, group, MenuTarget.ALL, Messages.get("gui.config.menu.targetAll"));
 		// disponibilité du menu Windows 11 vérifiée à l'ouverture
 		targetButtons.get(MenuTarget.MODERN).setEnabled(false);
 		targetButtons.get(MenuTarget.ALL).setEnabled(false);
 		targets.add(menuAvailability);
 
-		final JButton install = new JButton("Installer / Mettre à jour");
+		final JButton install = new JButton(Messages.get("gui.config.menu.install"));
 		install.addActionListener(e -> installMenu());
-		final JButton uninstall = new JButton("Désinstaller");
+		final JButton uninstall = new JButton(Messages.get("gui.config.menu.uninstall"));
 		uninstall.addActionListener(e -> uninstallMenu());
 
 		final JPanel content = new JPanel();
@@ -707,7 +750,7 @@ final class ConfigWindow {
 		final JPanel buttons = leftFlow(install, uninstall);
 		buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
 		content.add(buttons);
-		return section("Menu de l'Explorateur", "Clic droit sur un dossier photo : droits, synchronisation, ouverture dans Synology Photos.", content);
+		return section(Messages.get("gui.config.menu.title"), Messages.get("gui.config.menu.description"), content);
 	}
 
 	/** Case d'une entrée pour le menu Windows 11 (modern) ou le menu classique. */
@@ -743,18 +786,18 @@ final class ConfigWindow {
 				button.setEnabled(available);
 				button.setToolTipText(available ? null : availability.reason());
 			}
-			menuAvailability.setText(available ? " " : "Menu Windows 11 indisponible : " + availability.reason() + ".");
+			menuAvailability.setText(available ? " " : Messages.get("menu.install.modern.unavailable", availability.reason()));
 			if (form.menuTarget == null) {
 				// choix automatique : on montre la cible effective sans la figer dans la configuration
 				targetButtons.get(available ? MenuTarget.MODERN : MenuTarget.CLASSIC).setSelected(true);
 			}
 			showMenuStatus(state.status());
-		}, () -> menuStatus.setText("Installé : état inconnu."));
+		}, () -> menuStatus.setText(Messages.get("gui.config.menu.unknown")));
 	}
 
 	private void showMenuStatus(final MenuService.Status status) {
-		menuStatus.setText("Installé : " + (status.classic() && status.modern() ? "menu Windows 11 et menu classique."
-				: status.modern() ? "menu Windows 11." : status.classic() ? "menu classique." : "aucun menu."));
+		final String key = status.classic() && status.modern() ? "both" : status.modern() ? "modern" : status.classic() ? "classic" : "none";
+		menuStatus.setText(Messages.get("gui.config.menu.installed." + key));
 	}
 
 	private MenuTarget selectedTarget() {
@@ -772,12 +815,12 @@ final class ConfigWindow {
 			return new Installed(message, MenuService.status());
 		}, result -> {
 			showMenuStatus(result.status());
-			JOptionPane.showMessageDialog(frame, "Configuration enregistrée.\n" + result.message(), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.doneWith", result.message()), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 		}, this::reloadMenuStatus));
 	}
 
 	private void uninstallMenu() {
-		if (!Gui.confirm(frame, "Désinstaller le menu contextuel de l'Explorateur ?")) {
+		if (!Gui.confirm(frame, Messages.get("gui.config.menu.uninstallConfirm"))) {
 			return;
 		}
 		async(() -> {
@@ -785,13 +828,13 @@ final class ConfigWindow {
 			return MenuService.status();
 		}, status -> {
 			showMenuStatus(status);
-			JOptionPane.showMessageDialog(frame, "Menu contextuel désinstallé.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			JOptionPane.showMessageDialog(frame, Messages.get("cli.menu.uninstalled"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 		}, this::reloadMenuStatus);
 	}
 
 	/** Après un échec d'installation : l'état réel peut avoir changé (installation partielle). */
 	private void reloadMenuStatus() {
-		async(MenuService::status, this::showMenuStatus, () -> menuStatus.setText("Installé : état inconnu."));
+		async(MenuService::status, this::showMenuStatus, () -> menuStatus.setText(Messages.get("gui.config.menu.unknown")));
 	}
 
 	// ---------------------------------------------------------------- Enregistrement
@@ -803,12 +846,16 @@ final class ConfigWindow {
 	 * @param then suite après l'enregistrement (null : message « Configuration enregistrée. »)
 	 */
 	private void save(final boolean refreshMenu, final Consumer<Preferences> then) {
-		final List<String> problems = form.validate();
+		final List<ConfigForm.Problem> problems = form.validate();
 		if (!problems.isEmpty()) {
-			final String first = problems.get(0);
-			selectSection(first.equals(ConfigForm.CONNECTION_REQUIRED) ? CONNECTION : first.equals(ConfigForm.FOLDER_INVALID) ? FOLDER : GROUPS);
-			JOptionPane.showMessageDialog(frame, "Configuration incomplète :\n- " + String.join("\n- ", problems), Gui.TITLE,
-					JOptionPane.WARNING_MESSAGE);
+			selectSection(switch (problems.get(0).section()) {
+				case CONNECTION -> CONNECTION;
+				case FOLDER -> FOLDER;
+				case GROUPS -> GROUPS;
+			});
+			JOptionPane.showMessageDialog(frame,
+					Messages.get("gui.config.save.incomplete", problems.stream().map(ConfigForm.Problem::message).collect(Collectors.joining("\n- "))),
+					Gui.TITLE, JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		final ConfigForm current = form;
@@ -830,6 +877,8 @@ final class ConfigWindow {
 			}
 			return new Saved(pref, menuError);
 		}, result -> {
+			final boolean languageChanged = !(saved == null ? Preferences.LANGUAGE_AUTO : saved.getLanguageSetting())
+					.equals(result.pref().getLanguageSetting());
 			saved = result.pref();
 			form = current.afterSave(result.pref());
 			if (nasGroups != null) {
@@ -843,10 +892,13 @@ final class ConfigWindow {
 			if (then != null) {
 				then.accept(result.pref());
 			} else if (result.menuError() != null) {
-				JOptionPane.showMessageDialog(frame, "Configuration enregistrée.\nMenu contextuel non mis à jour : " + result.menuError(),
+				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.menuError", result.menuError()),
 						Gui.TITLE, JOptionPane.WARNING_MESSAGE);
 			} else {
-				JOptionPane.showMessageDialog(frame, "Configuration enregistrée.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.save.done"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			}
+			if (languageChanged) {
+				JOptionPane.showMessageDialog(frame, Messages.get("gui.config.language.restart"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 			}
 		}, () -> {
 			// erreur déjà affichée, rien n'a changé dans le formulaire

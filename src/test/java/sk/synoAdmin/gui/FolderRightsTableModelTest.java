@@ -29,8 +29,8 @@ class FolderRightsTableModelTest {
 		assertEquals(Boolean.TRUE, model.getValueAt(0, 0));
 		assertEquals(Boolean.FALSE, model.getValueAt(1, 0));
 		assertEquals("famille", model.getValueAt(0, 1));
-		assertEquals("oui", model.getValueAt(0, 2));
-		assertEquals("oui", model.getValueAt(1, 3));
+		assertEquals("yes", model.getValueAt(0, 2));
+		assertEquals("yes", model.getValueAt(1, 3));
 		assertFalse(model.isModified());
 		assertTrue(model.hasGap(1));
 	}

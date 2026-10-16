@@ -14,6 +14,7 @@ import javax.swing.event.AncestorEvent;
 import javax.swing.event.AncestorListener;
 
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.ui.Interaction;
 
 /**
@@ -21,8 +22,6 @@ import sk.synoAdmin.ui.Interaction;
  * Une annulation lève UserException("Saisie annulée.").
  */
 final class SwingInteraction implements Interaction {
-
-	private static final String CANCELLED = "Saisie annulée.";
 
 	@Override
 	public String promptLine(final String label) {
@@ -39,7 +38,7 @@ final class SwingInteraction implements Interaction {
 		final String value = Gui.onEdt(() -> (String) JOptionPane.showInputDialog(null, label, Gui.TITLE,
 				JOptionPane.QUESTION_MESSAGE, null, null, defaultValue));
 		if (value == null) {
-			throw new UserException(CANCELLED);
+			throw new UserException(Messages.get("ui.input.cancelled"));
 		}
 		return value.trim().isEmpty() && defaultValue != null ? defaultValue : value.trim();
 	}
@@ -64,7 +63,7 @@ final class SwingInteraction implements Interaction {
 				return selected;
 			});
 			if (choices == null) {
-				throw new UserException(CANCELLED);
+				throw new UserException(Messages.get("ui.input.cancelled"));
 			}
 			if (!choices.isEmpty()) {
 				return choices;
@@ -114,7 +113,7 @@ final class SwingInteraction implements Interaction {
 			return choice == JOptionPane.OK_OPTION ? new String(field.getPassword()) : null;
 		});
 		if (value == null) {
-			throw new UserException(CANCELLED);
+			throw new UserException(Messages.get("ui.input.cancelled"));
 		}
 		return value;
 	}

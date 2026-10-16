@@ -32,8 +32,8 @@ class SyncTableModelTest {
 		final SyncTableModel model = new SyncTableModel(new SyncPlan(SyncPlan.Direction.PUSH, deltas, 2, List.of(), List.of()));
 
 		assertEquals(2, model.getRowCount());
-		assertEquals(List.of("/a", "amis", "oui", "non"), row(model, 0));
-		assertEquals(List.of("/b", "famille", "non", "oui"), row(model, 1));
+		assertEquals(List.of("/a", "amis", "yes", "no"), row(model, 0));
+		assertEquals(List.of("/b", "famille", "no", "yes"), row(model, 1));
 	}
 
 	private static List<Object> row(final SyncTableModel model, final int row) {

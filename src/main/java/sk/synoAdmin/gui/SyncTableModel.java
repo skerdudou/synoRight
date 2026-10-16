@@ -10,12 +10,13 @@ import javax.swing.table.AbstractTableModel;
 import sk.synoAdmin.engine.DeltaResolver.GrpDelta;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.SyncPlan;
+import sk.synoAdmin.i18n.Messages;
 
 /**
  * Écarts entre fichiers et Synology Photos : une ligne par dossier et par groupe, triée par dossier puis groupe.
  */
 final class SyncTableModel extends AbstractTableModel {
-	private static final String[] COLUMNS = { "Dossier", "Groupe", "Synology Photos", "Fichier" };
+	private static final int COLUMN_COUNT = 4;
 
 	/** Un écart : présence du groupe sur le dossier dans Synology Photos et dans le fichier de droits. */
 	record Row(String folder, String group, boolean inPhotos, boolean inFile) {
@@ -40,12 +41,17 @@ final class SyncTableModel extends AbstractTableModel {
 
 	@Override
 	public int getColumnCount() {
-		return COLUMNS.length;
+		return COLUMN_COUNT;
 	}
 
 	@Override
 	public String getColumnName(final int column) {
-		return COLUMNS[column];
+		return switch (column) {
+			case 0 -> Messages.get("gui.column.folder");
+			case 1 -> Messages.get("gui.column.group");
+			case 2 -> "Synology Photos";
+			default -> Messages.get("gui.column.file");
+		};
 	}
 
 	@Override
@@ -54,8 +60,8 @@ final class SyncTableModel extends AbstractTableModel {
 		return switch (column) {
 			case 0 -> r.folder();
 			case 1 -> r.group();
-			case 2 -> r.inPhotos() ? "oui" : "non";
-			default -> r.inFile() ? "oui" : "non";
+			case 2 -> FolderRightsTableModel.yesNo(r.inPhotos());
+			default -> FolderRightsTableModel.yesNo(r.inFile());
 		};
 	}
 }

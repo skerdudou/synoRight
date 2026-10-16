@@ -76,6 +76,17 @@ class ConfigFormTest {
 	}
 
 	@Test
+	void groupesDansUnAutreOrdre_pasDeModification(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd",
+				List.of(new Group("5", "zoé"), new Group("3", "famille")), false);
+		final ConfigForm form = ConfigForm.from(pref);
+
+		form.groups = List.of(new Group("3", "famille"), new Group("5", "zoé"));
+
+		assertFalse(form.isDirty());
+	}
+
+	@Test
 	void motDePasseVide_conserveLActuel(@TempDir final Path dir) {
 		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd", List.of(new Group("3", "famille")), false);
 		final ConfigForm form = ConfigForm.from(pref);

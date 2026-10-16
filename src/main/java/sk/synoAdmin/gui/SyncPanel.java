@@ -6,6 +6,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import javax.swing.BorderFactory;
@@ -31,7 +32,13 @@ final class SyncPanel extends JPanel {
 	private record Analysis(RightEngine engine, SyncPlan push, SyncPlan pull) {
 	}
 
+	/** Exécuteur de tâches longues (hors EDT, résultat traité sur l'EDT). */
+	interface TaskRunner {
+		<T> void run(Supplier<T> task, Consumer<T> onSuccess);
+	}
+
 	private final Supplier<Preferences> prefs;
+	private final TaskRunner runner;
 	private final JButton analyseButton = new JButton("Analyser");
 	private final JButton pushButton = new JButton("Fichiers → Photos");
 	private final JButton pullButton = new JButton("Photos → fichiers");
@@ -45,8 +52,17 @@ final class SyncPanel extends JPanel {
 	 * @param highlighted sens mis en avant (peut être null)
 	 */
 	SyncPanel(final Supplier<Preferences> prefs, final SyncPlan.Direction highlighted) {
+		this(prefs, highlighted, null);
+	}
+
+	/**
+	 * @param runner exécute les tâches longues du panneau (null : Gui.runAsync sur le panneau) ; la fenêtre de
+	 *        configuration les sérialise avec les siennes (pas de synchronisation pendant un enregistrement)
+	 */
+	SyncPanel(final Supplier<Preferences> prefs, final SyncPlan.Direction highlighted, final TaskRunner runner) {
 		super(new BorderLayout(0, 8));
 		this.prefs = prefs;
+		this.runner = runner;
 		setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
 		pushButton.setEnabled(false);
@@ -86,11 +102,19 @@ final class SyncPanel extends JPanel {
 	/** Lance l'analyse (lecture des fichiers et de Synology Photos) hors de l'EDT ; à appeler depuis l'EDT. */
 	void analyse() {
 		// moteur neuf à chaque analyse : il accumule les dossiers et les avertissements
-		Gui.runAsync(this, () -> {
+		run(() -> {
 			final RightEngine engine = new RightEngine(prefs.get());
 			engine.getFullState();
 			return new Analysis(engine, engine.planPush(), engine.planPull());
 		}, this::show);
+	}
+
+	private <T> void run(final Supplier<T> task, final Consumer<T> onSuccess) {
+		if (runner == null) {
+			Gui.runAsync(this, task, onSuccess);
+		} else {
+			runner.run(task, onSuccess);
+		}
 	}
 
 	private void show(final Analysis result) {
@@ -121,7 +145,7 @@ final class SyncPanel extends JPanel {
 	private void applyPush() {
 		final Analysis current = analysis;
 		if (current != null && Gui.confirm(this, "Appliquer " + current.push().changeCount() + " modification(s) dans Synology Photos ?")) {
-			Gui.runAsync(this, () -> current.engine().apply(current.push()), n -> {
+			run(() -> current.engine().apply(current.push()), n -> {
 				JOptionPane.showMessageDialog(this, "Droits Synology Photos mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 				analyse();
 			});
@@ -131,7 +155,7 @@ final class SyncPanel extends JPanel {
 	private void applyPull() {
 		final Analysis current = analysis;
 		if (current != null && Gui.confirm(this, "Appliquer " + current.pull().changeCount() + " modification(s) dans les fichiers de droits ?")) {
-			Gui.runAsync(this, () -> current.engine().apply(current.pull()), n -> {
+			run(() -> current.engine().apply(current.pull()), n -> {
 				JOptionPane.showMessageDialog(this, n + " fichier(s) de droits mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 				analyse();
 			});

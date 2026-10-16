@@ -201,7 +201,8 @@ final class ConfigWindow {
 		cardPanel.add(folderSection(), SECTIONS[FOLDER]);
 		cardPanel.add(groupsSection(), SECTIONS[GROUPS]);
 		cardPanel.add(menuSection(), SECTIONS[3]);
-		cardPanel.add(new SyncPanel(() -> saved, SyncPlan.Direction.PUSH), SECTIONS[SYNC]);
+		// tâches de la synchronisation dans la file de la fenêtre : jamais pendant un enregistrement ou une installation
+		cardPanel.add(new SyncPanel(() -> saved, SyncPlan.Direction.PUSH, this::queue), SECTIONS[SYNC]);
 
 		// sections indisponibles : grisées et non sélectionnables
 		sectionList.setSelectionModel(new DefaultListSelectionModel() {
@@ -288,6 +289,11 @@ final class ConfigWindow {
 	}
 
 	private void close() {
+		if (busy) {
+			// fermer tuerait l'opération en cours (écriture de la configuration, installation du menu…)
+			JOptionPane.showMessageDialog(frame, "Opération en cours, veuillez patienter.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
 		if (form.isDirty() && !Gui.confirm(frame, "Quitter sans enregistrer les modifications ?")) {
 			return;
 		}
@@ -333,8 +339,9 @@ final class ConfigWindow {
 	}
 
 	/**
-	 * Tâche longue hors de l'EDT ; les tâches de la fenêtre s'exécutent l'une après l'autre (Gui.runAsync désactive
-	 * le contenu de la fenêtre et en restaure l'état : deux exécutions simultanées le laisseraient désactivé).
+	 * Tâche longue hors de l'EDT ; les tâches de la fenêtre (synchronisation comprise) s'exécutent l'une après
+	 * l'autre : pas de synchronisation pendant un enregistrement, et un résultat est traité avant la tâche suivante.
+	 * Le contenu de la fenêtre est désactivé pendant chaque tâche et la fermeture refusée tant que la file n'est pas vide.
 	 */
 	private <T> void async(final Supplier<T> task, final Consumer<T> onSuccess, final Runnable onFailure) {
 		final boolean[] finished = { false };
@@ -363,6 +370,13 @@ final class ConfigWindow {
 			busy = true;
 			start.run();
 		}
+	}
+
+	/** Tâche de la synchronisation, mise dans la file de la fenêtre (erreur affichée par Gui.runAsync). */
+	private <T> void queue(final Supplier<T> task, final Consumer<T> onSuccess) {
+		async(task, onSuccess, () -> {
+			// erreur déjà affichée
+		});
 	}
 
 	private void runNext() {

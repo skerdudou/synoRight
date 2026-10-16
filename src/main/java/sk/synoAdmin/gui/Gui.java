@@ -12,9 +12,10 @@ import java.awt.event.WindowEvent;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
-import java.util.IdentityHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -44,6 +45,9 @@ import sk.synoAdmin.menu.ProcessRunner;
 public final class Gui {
 
 	public static final String TITLE = "synoRight";
+
+	/** Composants désactivés par des tâches en cours (EDT seulement ; Component : égalité par identité). */
+	private static final Map<Component, DisableLock> DISABLED = new WeakHashMap<>();
 
 	private Gui() {
 		// utility
@@ -144,8 +148,7 @@ public final class Gui {
 	 */
 	public static <T> void runAsync(final Component owner, final Supplier<T> task, final Consumer<T> onSuccess,
 			final Runnable onFailure) {
-		final Map<Component, Boolean> states = new IdentityHashMap<>();
-		disable(owner, states);
+		final List<Component> disabled = disable(owner);
 		owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 		new SwingWorker<T, Void>() {
 			@Override
@@ -155,7 +158,7 @@ public final class Gui {
 
 			@Override
 			protected void done() {
-				restore(states);
+				restore(disabled);
 				owner.setCursor(Cursor.getDefaultCursor());
 				try {
 					final T result = get();
@@ -177,19 +180,50 @@ public final class Gui {
 		}.execute();
 	}
 
-	/** Désactive le composant et tout son contenu (setEnabled seul ne touche pas aux enfants d'une fenêtre). */
-	private static void disable(final Component component, final Map<Component, Boolean> states) {
-		states.put(component, component.isEnabled());
+	/**
+	 * Désactive le composant et tout son contenu (setEnabled seul ne touche pas aux enfants d'une fenêtre).
+	 * Réentrant : des tâches qui se chevauchent se composent, l'état d'origine n'est rétabli qu'à la dernière
+	 * restauration. Sur l'EDT uniquement.
+	 *
+	 * @return les composants désactivés, à passer à {@link #restore(List)}
+	 */
+	static List<Component> disable(final Component component) {
+		final List<Component> acquired = new ArrayList<>();
+		disable(component, acquired);
+		return acquired;
+	}
+
+	private static void disable(final Component component, final List<Component> acquired) {
+		final DisableLock lock = DISABLED.computeIfAbsent(component, c -> new DisableLock(c.isEnabled()));
+		lock.count++;
 		component.setEnabled(false);
+		acquired.add(component);
 		if (component instanceof final Container container) {
 			for (final Component child : container.getComponents()) {
-				disable(child, states);
+				disable(child, acquired);
 			}
 		}
 	}
 
-	private static void restore(final Map<Component, Boolean> states) {
-		states.forEach(Component::setEnabled);
+	/** Libère une désactivation ; un composant retrouve son état d'origine quand plus aucune tâche ne le désactive. */
+	static void restore(final List<Component> acquired) {
+		for (final Component component : acquired) {
+			final DisableLock lock = DISABLED.get(component);
+			if (lock != null && --lock.count == 0) {
+				DISABLED.remove(component);
+				component.setEnabled(lock.originalEnabled);
+			}
+		}
+	}
+
+	/** Désactivations en cours d'un composant et son état avant la première. */
+	private static final class DisableLock {
+		private final boolean originalEnabled;
+		private int count;
+
+		DisableLock(final boolean originalEnabled) {
+			this.originalEnabled = originalEnabled;
+		}
 	}
 
 	/** Erreur prévue (UserException) : message seul ; sinon message + détail repliable. */

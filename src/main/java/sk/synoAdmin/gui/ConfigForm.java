@@ -198,7 +198,8 @@ final class ConfigForm {
 
 	private State state() {
 		return new State(normalizedUrl(), user, password, storePassword, folder,
-				groups.stream().map(g -> g.getId() + ":" + g.getName()).toList(),
+				// ordre indifférent : les cases suivent l'ordre du NAS, la configuration le sien
+				groups.stream().map(g -> g.getId() + ":" + g.getName()).sorted().toList(),
 				List.copyOf(menuEntries), menuTarget, fingerprint);
 	}
 }

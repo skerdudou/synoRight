@@ -1,116 +1,172 @@
 # synoRight
 
-Outil en ligne de commande pour synchroniser les droits d'accès des albums **Synology Photos** (espace partagé, API `SYNO.FotoTeam`) avec des fichiers marqueurs posés sur le partage réseau du NAS.
+**Manage Synology Photos Shared Space permissions from Windows File Explorer, with plain marker files on the NAS share.**
 
-Principe : un dossier photo porte un fichier caché `@<groupe>.synoRight` pour chaque groupe autorisé. L'outil compare ces fichiers avec les permissions réelles de Synology Photos et applique le delta, dans un sens ou dans l'autre. Il gère 2 niveaux de dossiers sous la racine photo.
+[![Build](https://github.com/skerdudou/synoRight/actions/workflows/build.yml/badge.svg)](https://github.com/skerdudou/synoRight/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/skerdudou/synoRight?include_prereleases&sort=semver)](https://github.com/skerdudou/synoRight/releases)
+![Java 25](https://img.shields.io/badge/Java-25-orange)
+![Windows](https://img.shields.io/badge/platform-Windows-0078D6)
+
+[Français](README.fr.md)
+
+synoRight synchronises the folder permissions of the **Synology Photos Shared Space** (API `SYNO.FotoTeam`) with hidden marker files `@<short name>.synoRight` placed in the photo folders of the NAS share. Permissions become visible and editable where the photos are: in File Explorer, with a right-click.
+
+## How it works
+
+- Each managed NAS group gets a **short name** (e.g. `Smith` for the group "Smith family"). Only the group id (gid) links it to the NAS; the short name is used for the marker file names and for the menu entries.
+- A photo folder contains a hidden file `@<short name>.synoRight` for each group allowed to see it. Example: `\\NAS\photo\2024\Holidays\@Smith.synoRight`.
+- synoRight compares these files with the actual Synology Photos permissions and applies the differences, in either direction:
+  - **Files → Photos** (`push`): the marker files are the reference, Synology Photos permissions are updated. It also removes the permissions that new folders inherit from their parent folder in Synology Photos.
+  - **Photos → files** (`pull`): Synology Photos is the reference, marker files are created or deleted.
+- Permissions are managed on **2 folder levels** below the photo root (e.g. `2024` and `2024\Holidays`), the levels on which Synology Photos lets you manage them. Giving a group access to a sub-folder also gives it access to the parent folder.
+- Folders not yet indexed by Synology Photos are reported and ignored.
+
+## Features
+
+- **Configuration window** (`synoRightGui.exe`): NAS connection (with OTP and self-signed certificate support), photo folder, managed groups and their short names, File Explorer menu, synchronization (preview of the differences, then Files → Photos or Photos → files), language.
+- **File Explorer context menu** on folders and folder backgrounds:
+  - **Windows 11 menu**, shown at the top level of the right-click menu (native shell extension in a signed sparse package);
+  - **classic menu** (under "Show more options"), no administrator rights needed;
+  - entries chosen separately for each menu: folder permissions, open in Synology Photos, synchronization status, both full synchronizations, add / remove each group, synoRight configuration.
+- **Folder permissions window**: check or uncheck the groups allowed on a folder.
+- **Command line** (`synoRight.exe`) for every operation, with dry-run and confirmation.
+- Password and session encrypted with a per-computer key; the Synology session (OTP) is remembered.
+- Available in **English, French, German, Spanish and Italian**.
 
 ## Installation
 
-1. Construire l'application autonome (runtime Java embarqué, rien à installer sur le poste) :
-   ```
-   mvn package -Pexe
-   ```
-   Prérequis : JDK 25, Maven, et pour le menu Windows 11 : Visual Studio 2022 Build Tools (charge de travail C++) et Windows 11 SDK, ainsi qu'un certificat de signature créé une seule fois par `native\create-cert.ps1`. `-Dnative.skip` construit l'application sans le menu Windows 11 (aucun de ces prérequis natifs n'est alors nécessaire).
+1. Download `synoRight-<version>-windows-x64.zip` from the [Releases](https://github.com/skerdudou/synoRight/releases) page. It embeds its own Java runtime: nothing else to install.
+2. Unzip it to its final location (e.g. `C:\Program Files\synoRight`). The folder contains `synoRight.exe` (command line), `synoRightGui.exe` (no console) and, for the Windows 11 menu, `synoRightMenu.dll`, `synoRight.msix` and `synoRight.cer`.
+3. Run **`synoRightGui.exe`**: the configuration window opens. Fill in the connection, test it, choose the photo folder and the groups, then install the File Explorer menu.
 
-   Puis copier le dossier `target/dist/synoRight/` à son emplacement définitif (ex : `C:\Program Files\synoRight`). Il contient `synoRight.exe` (console), `synoRightGui.exe` (sans console) et, pour le menu Windows 11, `synoRightMenu.dll`, `synoRight.msix` et `synoRight.cer`.
-2. Lancer **`synoRightGui.exe`** : la fenêtre de configuration s'ouvre (voir « Interface graphique »). Ou, en console, l'assistant :
-   ```
-   synoRight init
-   ```
-   Il demande l'URL de DSM et le compte, **teste la connexion tout de suite** (OTP compris), puis le dossier photos (vérifié), fait choisir les groupes **dans la liste des groupes du NAS**, et propose d'installer le menu contextuel de l'Explorateur.
+The **Windows 11 menu** is installed for the current user, but the first installation on a computer asks **once for administrator approval**: Windows must trust the `CN=synoRight` certificate that signs the menu package. The UAC prompt shows "Windows PowerShell": it imports `synoRight.cer` (from the application folder) into the local machine "Trusted People" store. The classic menu needs no administrator rights.
 
-Relancer `init` sur une configuration existante propose les valeurs actuelles, mot de passe compris (Entrée pour les conserver). La session mémorisée n'est remplacée qu'à l'enregistrement : abandonner l'assistant ne change rien.
+The menu commands point to the application at its current location: if you move the folder, install the menu again.
 
-Sans le profil `exe`, `mvn package` produit `target/synoRight.jar`, utilisable avec `java -jar synoRight.jar <commande>` (Java 25+).
+A plain jar (`synoRight-<version>.jar`) is also published; it runs with `java -jar synoRight-<version>.jar <command>` (Java 25+) but does not include the Windows 11 menu.
 
-## Interface graphique
+## Usage
 
-`synoRightGui.exe` (ou `synoRight gui`) ouvre la **fenêtre de configuration** : connexion au NAS (URL, compte, mot de passe, test avec OTP et certificat), dossier photos, groupes gérés (choisis dans la liste du NAS), menu de l'Explorateur (entrées, Windows 11 / classique / les deux, installation et désinstallation) et synchronisation.
+### Configuration window
 
-Le menu contextuel ouvre d'autres fenêtres, sans console :
+`synoRightGui.exe` (or `synoRight gui`) opens the configuration window, with these sections:
 
-- **Droits du dossier** : les groupes autorisés sur le dossier, à cocher ou décocher.
-- **Synchronisation** : un aperçu des écarts entre fichiers et Synology Photos, puis application dans un sens ou dans l'autre après confirmation.
+- **Connection**: DSM URL, account, password (optionally remembered), connection test (asks for the OTP if needed, offers to trust a self-signed certificate).
+- **Photo folder**: the root of the photos on the share (e.g. `\\NAS\photo`).
+- **Groups**: the NAS groups to manage, picked from the list of groups of the NAS, and their short names.
+- **Explorer menu**: entries of each menu, menu to install (Windows 11, classic or both), install / update / uninstall.
+- **Synchronization**: analysis of the differences, then Files → Photos or Photos → files after confirmation.
+- **Language**: automatic (Windows display language) or a fixed language.
 
-« Synchroniser fichiers → Photos » retire aussi les droits hérités du parent par les nouveaux dossiers.
+### File Explorer menu
 
-## Commandes
+Right-click a photo folder (or the background of an open folder) and open the "Synology Photos permissions" menu. The entries open windows without any console:
+
+- **Folder permissions…**: the groups allowed on the folder, to check or uncheck;
+- **Synchronization status…** and **Synchronize files → Photos… / Photos → files…**: preview of the differences, then synchronization after confirmation;
+- **Add / Remove &lt;group&gt;**: one entry per managed group;
+- **Open in Synology Photos** (disabled by default) and **synoRight configuration…**.
+
+Notes:
+
+- Without an explicit choice, the Windows 11 menu is used when available, otherwise the classic menu (`menuTarget`).
+- On Windows 11, the entry of the Windows 11 menu also appears under "Show more options" (Windows behaviour for packaged extensions). With "Both", it is hidden there to leave room for the classic menu.
+- The Windows 11 menu shows no separators between groups of entries (a Windows 11 limitation for extension sub-menus); the classic menu does.
+- Group or entry changes are applied **without reinstalling** the menu (`groups add/remove` and the configuration window update it).
+- If the Windows 11 menu does not appear or is not up to date after an installation or an update, restart File Explorer (Windows cache).
+- A menu installed by an old version (`-a ACTION` syntax) shows a message asking to reinstall it.
+
+### Command line
 
 ```
-synoRight [-c <dossierConfig>] [-v] <commande>
+synoRight [-c <configFolder>] [-v] <command>
 ```
 
-| Commande | Description |
+| Command | Description |
 |---|---|
-| `init` | Assistant de configuration |
-| `status` | Écarts entre fichiers de droits et Synology Photos, sans rien modifier |
-| `pull [-n] [-y]` | Synology Photos → fichiers : crée/supprime les fichiers `.synoRight` |
-| `push [-n] [-y]` | Fichiers → Synology Photos : applique les droits décrits par les fichiers |
-| `show [dossier]` | Droits d'un dossier côté Photos et côté fichiers |
-| `grant <groupe> [dossier]` | Donne le droit à un groupe sur un dossier (et son parent) |
-| `revoke <groupe> [dossier]` | Retire le droit d'un groupe sur un dossier |
-| `config` | Affiche la configuration et vérifie dossier, connexion et groupes |
-| `groups` / `groups add` / `groups remove` | Liste / ajoute (parmi les groupes du NAS) / retire des groupes gérés |
-| `password [--forget]` | Change (après vérification) ou oublie le mot de passe mémorisé |
-| `logout` | Oublie la session Synology mémorisée |
-| `rights [dossier]` | Choix des groupes autorisés sur un dossier (invite en console ; la fenêtre est ouverte par le menu de l'Explorateur ou `synoRightGui`) |
-| `menu install [--modern\|--classic\|--all]` / `menu uninstall` | Menu contextuel de l'Explorateur Windows |
-| `gui` | Ouvre l'interface graphique (c'est ce que lance `synoRightGui.exe`) |
+| `init` | Configuration wizard in the console: tests the connection right away (OTP included), checks the photo folder, picks the groups among the NAS groups, offers to install the menu |
+| `status` | Differences between the permission files and Synology Photos, without changing anything |
+| `pull [-n] [-y]` | Synology Photos → files: creates / deletes the `.synoRight` files |
+| `push [-n] [-y]` | Files → Synology Photos: applies the permissions described by the files |
+| `show [folder]` | Permissions of a folder on the Synology Photos side and on the files side |
+| `grant <group> [folder]` | Grants a group permission on a folder (and on its parent folder) |
+| `revoke <group> [folder]` | Removes a group's permission on a folder |
+| `rights [folder]` | Chooses the groups allowed on a folder (console prompt) |
+| `config` | Shows the configuration and checks the photo folder, the NAS connection and the groups |
+| `groups` / `groups add` / `groups remove` | Lists / adds (among the NAS groups) / removes managed groups |
+| `password [--forget]` | Changes the stored password (verified against the NAS), or forgets it |
+| `logout` | Forgets the stored Synology session (the next login asks for the OTP again) |
+| `menu install [--modern\|--classic\|--all]` / `menu uninstall` | File Explorer context menu |
+| `gui` | Opens the configuration window (what `synoRightGui.exe` runs) |
 
-`[dossier]` vaut par défaut le répertoire courant. `pull` et `push` affichent le détail des modifications puis demandent confirmation (`-y` pour appliquer directement, `-n` / `--dry-run` pour seulement simuler). Les dossiers pas encore indexés par Synology Photos sont signalés et ignorés.
+- `<group>` is the short name of a managed group; `[folder]` defaults to the current directory.
+- `pull` and `push` show the detailed changes, then ask for confirmation: `-y` / `--yes` applies directly, `-n` / `--dry-run` only shows them.
+- Common options: `-c` / `--config` configuration folder, `-v` / `--verbose` processing times and error details, `-h` / `--help` help (also per command: `synoRight pull -h`), `-V` / `--version` version.
 
-Options communes : `-c` répertoire de configuration, `-v` mode verbeux (temps de traitement, stack traces), `-h` aide (aussi par commande : `synoRight pull -h`).
+Running `init` again on an existing configuration offers the current values, password included (press Enter to keep them). The stored session is only replaced when the configuration is saved: abandoning the wizard changes nothing.
 
 ## Configuration
 
-Par défaut dans `~/.synoRight/` (à défaut, une configuration présente dans le répertoire courant est utilisée ; `-c` pour un autre répertoire). Fichier `config.synoRight.properties`, éditable à la main (UTF-8, accents acceptés) :
+The configuration is stored in `~/.synoRight/` by default (otherwise a configuration found in the current directory is used; `-c` selects another folder). The file `config.synoRight.properties` can be edited by hand (UTF-8):
 
 ```properties
 folder=\\\\NAS\\photo
 url=https://nas.example.com:5001
 user=admin
-# mot de passe chiffré (écrit par init / password), optionnel : demandé en console sinon
+# encrypted password (written by the configuration window, init or password); optional: asked at login otherwise
 password=v2:...
-# id:nom;id:nom : id (gid) du groupe sur le NAS et nom court, libre (nom des fichiers @<nom>.synoRight et des entrées du menu)
-groups=65536:Kerdudou;65537:Godmez
-# temps de traitement et détail des erreurs
+# id:short name;id:short name: group id (gid) on the NAS and free short name (marker files @<short name>.synoRight, menu entries)
+groups=65536:Smith;65537:Jones
+# processing times and error details
 verbose=false
-# optionnel : empreinte SHA-256 du certificat auto-signé du NAS à accepter (proposé par init)
+# optional: SHA-256 fingerprint of the NAS self-signed certificate to trust (offered when testing the connection)
 certFingerprint=AB:CD:...
-# optionnel : entrées de chaque menu de l'Explorateur (rights, open, status, push, pull, groups, config) ; valeur par défaut : rights,status,push,config
-# (l'ancienne clé commune menuEntries reste lue pour les deux menus)
+# optional: entries of each Explorer menu (rights, open, status, push, pull, groups, config); default: rights,status,push,config
 menuEntries.modern=rights,status,push,config
 menuEntries.classic=rights,status,push,pull,groups,config
-# optionnel : modern, classic ou all (absent = Windows 11 si disponible, sinon classique)
+# optional: modern, classic or all (absent: Windows 11 if available, otherwise classic)
 menuTarget=modern
+# auto (Windows display language), en, fr, de, es or it
+language=auto
 ```
 
-L'entrée `open` ouvre l'album du dossier dans Synology Photos ; elle est désactivée par défaut.
+- The legacy key `menuEntries` (common to both menus) is still read when `menuEntries.modern` / `menuEntries.classic` are absent.
+- Changing the short name of a managed group changes the expected file names: the old `@<name>.synoRight` files are no longer taken into account, and Photos → files creates the new ones.
+- Commands that modify the configuration (`init`, `groups`, `password`, the configuration window, automatic migrations) rewrite the file: comments added by hand are not kept.
+- **Session file**: the Synology session (`cookieSession`, `synoToken`, `cookieDid`) is stored separately in `session.synoRight.properties` in the same folder, so the configuration can be copied to another computer without its session. Old configurations that contained it are migrated automatically.
+- **Key file**: the password and the session are encrypted with AES-GCM using a random per-computer key stored in `~/.synoRight/key` (owner-only access). If the key is missing, the password is simply asked again at login (and the session recreated). To use the same configuration on another computer, copy the key file too.
+- If the stored password is refused by the NAS, it is asked again and can be stored instead.
+- **Self-signed certificate**: if DSM presents an unrecognized certificate (default self-signed certificate), its SHA-256 fingerprint is shown and you can choose to trust it. Only this exact certificate is then accepted, in addition to the standard validation; if it changes (renewal), the connection fails again until it is trusted again.
 
-Le nom court d'un groupe peut différer de son nom sur le NAS (ex : `Kerdudou` pour le groupe « Famille Kerdudou ») : seul l'id le relie au NAS. Il se modifie dans la section Groupes de la fenêtre de configuration ; le changer pour un groupe déjà géré change le nom des fichiers attendus (les anciens `@<nom>.synoRight` ne sont plus pris en compte, « Photos → fichiers » recrée les nouveaux).
+## Languages
 
-Les commandes qui modifient la configuration (`init`, `groups`, `password`, migrations) réécrivent le fichier : les commentaires ajoutés à la main ne sont pas conservés.
+synoRight is translated into **English** (default), **French**, **German**, **Spanish** and **Italian**: windows, dialogs, File Explorer menu entries, console messages and command line help.
 
-La session Synology (`cookieSession`, `synoToken`, `cookieDid`) est mémorisée à part, dans `session.synoRight.properties` du même répertoire : la configuration peut être copiée sur un autre poste sans y embarquer de session. Les anciennes configurations qui la contenaient sont migrées automatiquement.
+The `language` key (`auto`, `en`, `fr`, `de`, `es`, `it`) selects the language; `auto` uses the Windows display language when it is one of these, English otherwise. It can be changed in the configuration window; the new language applies to the next window opened and to the File Explorer menus, rewritten on save.
 
-Le mot de passe et la session sont chiffrés en AES-GCM avec une clé aléatoire propre au poste, stockée dans `~/.synoRight/key` (accès restreint au propriétaire). Si la clé est absente ou perdue, le mot de passe est simplement redemandé à la connexion (et la session recréée) ; pour utiliser la même configuration sur un autre poste, copier aussi le fichier de clé.
+## Building from source
 
-Si le mot de passe mémorisé est refusé par le NAS, il est redemandé et peut être mémorisé à la place.
+Requirements: **JDK 25** and **Maven**.
 
-**Certificat auto-signé** : si DSM présente un certificat non reconnu (certificat par défaut, auto-signé), `init` l'affiche avec son empreinte SHA-256 et propose de lui faire confiance. Seul ce certificat précis est alors accepté, en plus de la validation standard ; s'il change (renouvellement), la connexion échoue à nouveau : relancer `init`.
+```
+mvn package
+```
 
-## Intégration Explorateur Windows
+produces `target/synoRight.jar` (runs with `java -jar target/synoRight.jar <command>`).
 
-Le menu contextuel « Droits Synology Photos » (clic droit sur un dossier ou sur le fond d'un dossier ouvert) s'installe depuis la fenêtre de configuration (section Menu Explorateur) ou par `synoRight menu install [--modern|--classic|--all]` (proposé à la fin d'`init`) :
+```
+mvn package -Pexe
+```
 
-- **Windows 11** : le menu apparaît **au premier niveau** du clic droit. Il repose sur le package `synoRight` et la DLL `synoRightMenu.dll`. La première installation sur un poste demande une **autorisation administrateur** (une seule fois) pour approuver le certificat `CN=synoRight` qui signe le package. L'invite UAC affiche « Windows PowerShell » : elle importe `synoRight.cer` (du dossier de l'application) dans le magasin « Personnes autorisées » (TrustedPeople) de l'ordinateur.
-- **Classique** : le menu est sous « Afficher plus d'options », écrit sous `HKCU` (pas de droits administrateur).
-- Sans choix, Windows 11 est utilisé s'il est disponible, sinon le menu classique (`menuTarget`).
-- Sous Windows 11, l'entrée du menu Windows 11 apparaît **aussi** dans « Afficher plus d'options » (comportement de Windows pour les extensions de package). Avec « Les deux », elle s'y masque pour laisser la place au menu classique et à ses propres entrées ; avec « Windows 11 » seul, c'est elle qu'on y retrouve.
-- Après une installation ou une mise à jour, si le menu Windows 11 n'apparaît pas ou n'est pas à jour, redémarrer l'Explorateur (cache de Windows).
+produces the standalone application (embedded Java runtime, built by `jpackage`) in `target/dist/synoRight/`, including the Windows 11 menu. This needs in addition:
 
-Les entrées sont au choix, **séparément pour chaque menu** (`menuEntries.modern`, `menuEntries.classic`) : droits du dossier, ouvrir dans Synology Photos, état de la synchro, les deux synchros complètes, ajout/retrait de chaque groupe configuré, configuration de synoRight. Les changements de groupes ou d'entrées sont pris en compte **sans réinstaller** (`groups add/remove` et la fenêtre de configuration mettent le menu à jour).
+- **Visual Studio 2022 Build Tools** with the C++ workload, and the **Windows 11 SDK** (MSBuild is located with `vswhere`, `makeappx` and `signtool` in the Windows Kits folder);
+- a **signing certificate** for the menu package (subject `CN=synoRight`, matching the package manifest):
+  - created once by `native\create-cert.ps1` (in `~\.synoRight-sign\`, password protected with DPAPI for the current user), or
+  - provided by the environment variables `SYNORIGHT_SIGN_PFX` (path to the `.pfx`) and `SYNORIGHT_SIGN_PASSWORD`.
 
-Le menu Windows 11 n'affiche pas de séparateurs entre les blocs d'entrées : c'est une limite du menu principal de Windows 11 pour les sous-menus des extensions (les séparateurs restent visibles dans le menu classique).
+`mvn package -Pexe -Dnative.skip` builds the application without the Windows 11 menu (no native requirement); the classic menu remains available.
 
-Le menu lance `synoRightGui.exe` : plus de fenêtre console depuis le menu. Les commandes générées pointent vers l'application à son emplacement courant : relancer l'installation du menu après un déplacement. Un menu installé par une ancienne version (syntaxe `-a ACTION`) affiche un message invitant à le réinstaller.
+## Releases and CI
+
+The GitHub Actions workflow [`build.yml`](.github/workflows/build.yml) runs the tests (`mvn verify`) on every push and pull request. Pushing a `v*` tag builds the full application with the Windows 11 menu and creates a draft pre-release with `synoRight-<version>-windows-x64.zip` and `synoRight-<version>.jar`. The menu package is signed with the certificate given by the `SYNORIGHT_SIGN_PFX_BASE64` and `SYNORIGHT_SIGN_PASSWORD` secrets, or else with a certificate generated for that build only (the release notes then say so).

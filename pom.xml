@@ -5,7 +5,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>skerdudou</groupId>
 	<artifactId>synoRight</artifactId>
-	<version>0.0.2-SNAPSHOT</version>
+	<version>0.3</version>
 	<packaging>jar</packaging>
 
 	<properties>
@@ -154,6 +154,8 @@
 										<!-- modules donnés par jdeps, + jdk.charsets pour l'ancien chiffrement (ISO-8859-2) -->
 										<argument>--add-modules</argument>
 										<argument>java.base,java.desktop,java.net.http,java.sql,jdk.charsets</argument>
+										<argument>--app-version</argument>
+										<argument>${project.version}</argument>
 										<argument>--win-console</argument>
 										<argument>--description</argument>
 										<argument>synoRight</argument>

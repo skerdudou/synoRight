@@ -2,6 +2,7 @@ package sk.synoAdmin.menu;
 
 import java.util.List;
 
+import sk.synoAdmin.UserException;
 import sk.synoAdmin.menu.MenuDefinition.MenuItem;
 import sk.synoAdmin.prefs.Preferences;
 
@@ -39,26 +40,36 @@ public final class MenuService {
 		final boolean modern = target != MenuTarget.CLASSIC;
 		final boolean classic = target != MenuTarget.MODERN;
 
-		if (modern) {
+		if (modern && classic) {
+			installBoth(() -> ClassicMenuInstaller.install(items, pref.getNasFolder(), pref.getConfigDir()),
+					() -> ModernMenuInstaller.install(items, pref.getConfigDir(), pref.getNasFolder()));
+		} else if (modern) {
 			ModernMenuInstaller.install(items, pref.getConfigDir(), pref.getNasFolder());
-		} else if (ModernMenuInstaller.isInstalled()) {
-			ModernMenuInstaller.uninstall();
-		}
-		if (classic) {
-			ClassicMenuInstaller.install(items, pref.getNasFolder(), pref.getConfigDir());
-		} else {
 			ClassicMenuInstaller.uninstall();
+		} else {
+			if (ModernMenuInstaller.isInstalled()) {
+				ModernMenuInstaller.uninstall();
+			}
+			ClassicMenuInstaller.install(items, pref.getNasFolder(), pref.getConfigDir());
 		}
 		return "Menu contextuel installé pour l'utilisateur courant ("
 				+ (modern && classic ? "Windows 11 et classique" : modern ? "Windows 11" : "classique") + ", "
 				+ items.size() + " entrée(s)).";
 	}
 
+	/** Installe le menu classique d'abord : un échec du menu Windows 11 le laisse en place et est signalé. */
+	static void installBoth(final Runnable classic, final Runnable modern) {
+		classic.run();
+		try {
+			modern.run();
+		} catch (final UserException e) {
+			throw new UserException("Menu classique installé, mais menu Windows 11 non installé : " + e.getMessage(), e);
+		}
+	}
+
 	/** Désinstalle les deux menus. */
 	public static void uninstall() {
-		if (ModernMenuInstaller.isInstalled()) {
-			ModernMenuInstaller.uninstall();
-		}
+		ModernMenuInstaller.uninstall();
 		ClassicMenuInstaller.uninstall();
 	}
 

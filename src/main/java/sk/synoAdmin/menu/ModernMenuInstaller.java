@@ -28,6 +28,7 @@ public final class ModernMenuInstaller {
 
 	public static final String PACKAGE_NAME = "synoRight";
 	static final String MENU_KEY = "HKEY_CURRENT_USER\\Software\\synoRight\\Menu";
+	private static final String REGISTRY_ROOT = "HKCU\\Software\\synoRight";
 	static final String DLL = "synoRightMenu.dll";
 	static final String MSIX = "synoRight.msix";
 	static final String CER = "synoRight.cer";
@@ -82,7 +83,7 @@ public final class ModernMenuInstaller {
 
 		// même version et contenu différent refusés par Add-AppxPackage : on retire l'ancien package
 		if (isInstalled()) {
-			powershell("Get-AppxPackage -Name " + PACKAGE_NAME + " | Remove-AppxPackage");
+			removePackage();
 		}
 		final ProcessRunner.Result added = powershell("Add-AppxPackage -Path " + psQuote(appDir.resolve(MSIX).toString())
 				+ " -ExternalLocation " + psQuote(appDir.toString()));
@@ -100,8 +101,26 @@ public final class ModernMenuInstaller {
 
 	/** Retire le package et la configuration du menu. */
 	public static void uninstall() {
-		powershell("Get-AppxPackage -Name " + PACKAGE_NAME + " | Remove-AppxPackage");
-		ProcessRunner.run(List.of("reg", "delete", "HKCU\\Software\\synoRight", "/f"));
+		if (!ProcessRunner.isWindows()) {
+			return;
+		}
+		if (isInstalled()) {
+			removePackage();
+		}
+		// clé absente = déjà désinstallé : on ne supprime que si elle existe
+		if (ProcessRunner.run(List.of("reg", "query", REGISTRY_ROOT)).ok()) {
+			final ProcessRunner.Result deleted = ProcessRunner.run(List.of("reg", "delete", REGISTRY_ROOT, "/f"));
+			if (!deleted.ok()) {
+				throw new UserException("Suppression de la configuration du menu Windows 11 en échec : " + deleted.output());
+			}
+		}
+	}
+
+	private static void removePackage() {
+		final ProcessRunner.Result removed = powershell("Get-AppxPackage -Name " + PACKAGE_NAME + " | Remove-AppxPackage");
+		if (!removed.ok()) {
+			throw new UserException("Retrait du package du menu Windows 11 en échec : " + removed.output());
+		}
 	}
 
 	public static boolean isInstalled() {

@@ -53,7 +53,7 @@ synoRight [-c <dossierConfig>] [-v] <commande>
 | `groups` / `groups add` / `groups remove` | Liste / ajoute (parmi les groupes du NAS) / retire des groupes gérés |
 | `password [--forget]` | Change (après vérification) ou oublie le mot de passe mémorisé |
 | `logout` | Oublie la session Synology mémorisée |
-| `rights [dossier]` | Choix des groupes autorisés sur un dossier (fenêtre) |
+| `rights [dossier]` | Choix des groupes autorisés sur un dossier (invite en console ; la fenêtre est ouverte par le menu de l'Explorateur ou `synoRightGui`) |
 | `menu install [--modern\|--classic\|--all]` / `menu uninstall` | Menu contextuel de l'Explorateur Windows |
 | `gui` | Ouvre l'interface graphique (c'est ce que lance `synoRightGui.exe`) |
 
@@ -77,8 +77,8 @@ groups=3:famille;5:amis
 verbose=false
 # optionnel : empreinte SHA-256 du certificat auto-signé du NAS à accepter (proposé par init)
 certFingerprint=AB:CD:...
-# optionnel : entrées du menu de l'Explorateur (rights, open, status, push, pull, groups, config)
-menuEntries=rights,status,push,pull,groups,config
+# optionnel : entrées du menu de l'Explorateur (rights, open, status, push, pull, groups, config) ; valeur par défaut : rights,status,push,config
+menuEntries=rights,status,push,config
 # optionnel : modern, classic ou all (absent = Windows 11 si disponible, sinon classique)
 menuTarget=modern
 ```
@@ -99,7 +99,7 @@ Si le mot de passe mémorisé est refusé par le NAS, il est redemandé et peut 
 
 Le menu contextuel « Droits Synology Photos » (clic droit sur un dossier ou sur le fond d'un dossier ouvert) s'installe depuis la fenêtre de configuration (section Menu Explorateur) ou par `synoRight menu install [--modern|--classic|--all]` (proposé à la fin d'`init`) :
 
-- **Windows 11** : le menu apparaît **au premier niveau** du clic droit. Il repose sur le package `synoRight` et la DLL `synoRightMenu.dll`. La première installation sur un poste demande une **autorisation administrateur** (une seule fois) pour approuver le certificat `CN=synoRight` qui signe le package.
+- **Windows 11** : le menu apparaît **au premier niveau** du clic droit. Il repose sur le package `synoRight` et la DLL `synoRightMenu.dll`. La première installation sur un poste demande une **autorisation administrateur** (une seule fois) pour approuver le certificat `CN=synoRight` qui signe le package. L'invite UAC affiche « Windows PowerShell » : elle importe `synoRight.cer` (du dossier de l'application) dans le magasin « Personnes autorisées » (TrustedPeople) de l'ordinateur.
 - **Classique** : le menu est sous « Afficher plus d'options », écrit sous `HKCU` (pas de droits administrateur).
 - Sans choix, Windows 11 est utilisé s'il est disponible, sinon le menu classique (`menuTarget`).
 

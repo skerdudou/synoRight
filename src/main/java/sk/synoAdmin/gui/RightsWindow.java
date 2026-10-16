@@ -36,7 +36,8 @@ final class RightsWindow {
 		new RightEngine(pref).checkFolder(folder); // avant toute connexion : erreur immédiate si hors du dossier photos
 
 		final JFrame frame = new JFrame("Droits du dossier — " + Gui.TITLE);
-		frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // fermeture via la garde, toujours terminée par dispose()
+		final CloseGuard guard = new CloseGuard();
 		final JLabel title = new JLabel("Chargement des droits…");
 		title.putClientProperty("FlatLaf.styleClass", "h3");
 		final JTable table = new JTable();
@@ -45,7 +46,7 @@ final class RightsWindow {
 		final JButton apply = new JButton("Appliquer");
 		final JButton close = new JButton("Fermer");
 		apply.setEnabled(false);
-		close.addActionListener(e -> frame.dispose());
+		close.addActionListener(e -> guard.close(frame));
 
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		buttons.add(apply);
@@ -75,18 +76,26 @@ final class RightsWindow {
 		}, frame::dispose);
 		apply.addActionListener(e -> {
 			final FolderRightsTableModel model = (FolderRightsTableModel) table.getModel();
+			final var wanted = model.wantedGroups(); // lu sur l'EDT
+			guard.begin(); // l'écriture ne doit pas être interrompue par la fermeture
 			Gui.runAsync(frame.getContentPane(), () -> {
 				final RightEngine engine = new RightEngine(pref);
 				engine.login();
-				return engine.setFolderRights(folder, model.wantedGroups());
+				return engine.setFolderRights(folder, wanted);
 			}, messages -> {
+				guard.end();
 				if (!messages.isEmpty()) {
 					JOptionPane.showMessageDialog(frame, String.join("\n", messages), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 				}
 				load[0].run();
-			});
+			}, guard::end);
 		});
 		frame.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(final WindowEvent e) {
+				guard.close(frame);
+			}
+
 			@Override
 			public void windowOpened(final WindowEvent e) {
 				load[0].run();

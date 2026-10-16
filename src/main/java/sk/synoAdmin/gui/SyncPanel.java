@@ -34,7 +34,7 @@ final class SyncPanel extends JPanel {
 
 	/** Exécuteur de tâches longues (hors EDT, résultat traité sur l'EDT). */
 	interface TaskRunner {
-		<T> void run(Supplier<T> task, Consumer<T> onSuccess);
+		<T> void run(Supplier<T> task, Consumer<T> onSuccess, Runnable onFailure);
 	}
 
 	private final Supplier<Preferences> prefs;
@@ -45,6 +45,7 @@ final class SyncPanel extends JPanel {
 	private final JLabel summary = new JLabel("Cliquez sur Analyser pour comparer les fichiers et Synology Photos.");
 	private final JLabel warnings = new JLabel();
 	private final JTable table = new JTable();
+	private final CloseGuard closeGuard = new CloseGuard();
 	private Analysis analysis;
 
 	/**
@@ -106,15 +107,41 @@ final class SyncPanel extends JPanel {
 			final RightEngine engine = new RightEngine(prefs.get());
 			engine.getFullState();
 			return new Analysis(engine, engine.planPush(), engine.planPull());
-		}, this::show);
+		}, this::show, this::clearAnalysis);
 	}
 
-	private <T> void run(final Supplier<T> task, final Consumer<T> onSuccess) {
+	/** Écriture en cours (application d'un plan) : la fenêtre autonome refuse alors la fermeture. */
+	boolean isApplying() {
+		return closeGuard.isBusy();
+	}
+
+	CloseGuard closeGuard() {
+		return closeGuard;
+	}
+
+	/** Oublie l'analyse courante (échec d'une ré-analyse) : un plan périmé ne doit pas pouvoir être appliqué. */
+	private void clearAnalysis() {
+		analysis = null;
+		pushButton.setEnabled(false);
+		pullButton.setEnabled(false);
+	}
+
+	private <T> void run(final Supplier<T> task, final Consumer<T> onSuccess, final Runnable onFailure) {
 		if (runner == null) {
-			Gui.runAsync(this, task, onSuccess);
+			Gui.runAsync(this, task, onSuccess, onFailure);
 		} else {
-			runner.run(task, onSuccess);
+			runner.run(task, onSuccess, onFailure);
 		}
+	}
+
+	/** Application d'un plan : suivie par la garde de fermeture, puis nouvelle analyse. */
+	private void apply(final Supplier<Integer> task, final Consumer<Integer> done) {
+		closeGuard.begin();
+		run(task, n -> {
+			closeGuard.end();
+			done.accept(n);
+			analyse();
+		}, closeGuard::end);
 	}
 
 	private void show(final Analysis result) {
@@ -145,33 +172,34 @@ final class SyncPanel extends JPanel {
 	private void applyPush() {
 		final Analysis current = analysis;
 		if (current != null && Gui.confirm(this, "Appliquer " + current.push().changeCount() + " modification(s) dans Synology Photos ?")) {
-			run(() -> current.engine().apply(current.push()), n -> {
-				JOptionPane.showMessageDialog(this, "Droits Synology Photos mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
-				analyse();
-			});
+			apply(() -> current.engine().apply(current.push()),
+					n -> JOptionPane.showMessageDialog(this, "Droits Synology Photos mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE));
 		}
 	}
 
 	private void applyPull() {
 		final Analysis current = analysis;
 		if (current != null && Gui.confirm(this, "Appliquer " + current.pull().changeCount() + " modification(s) dans les fichiers de droits ?")) {
-			run(() -> current.engine().apply(current.pull()), n -> {
-				JOptionPane.showMessageDialog(this, n + " fichier(s) de droits mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
-				analyse();
-			});
+			apply(() -> current.engine().apply(current.pull()),
+					n -> JOptionPane.showMessageDialog(this, n + " fichier(s) de droits mis à jour.", Gui.TITLE, JOptionPane.INFORMATION_MESSAGE));
 		}
 	}
 
 	/** Construit la fenêtre autonome (sur l'EDT, sans accès réseau) ; l'analyse démarre à l'ouverture. */
 	static JFrame createWindow(final Preferences pref, final SyncPlan.Direction direction) {
 		final JFrame frame = new JFrame("Synchronisation — " + Gui.TITLE);
-		frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // fermeture via la garde, toujours terminée par dispose()
 		final SyncPanel panel = new SyncPanel(() -> pref, direction);
 		frame.setContentPane(panel);
 		if (panel.defaultButton() != null) {
 			frame.getRootPane().setDefaultButton(panel.defaultButton());
 		}
 		frame.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(final WindowEvent e) {
+				panel.closeGuard().close(frame);
+			}
+
 			@Override
 			public void windowOpened(final WindowEvent e) {
 				panel.analyse();

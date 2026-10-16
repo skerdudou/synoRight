@@ -78,7 +78,7 @@ public final class ModernMenuInstaller {
 		if (!availability.available()) {
 			throw new UserException("Menu Windows 11 indisponible : " + availability.reason() + ".");
 		}
-		final Path appDir = Launchers.appDir().orElseThrow();
+		final Path appDir = Launchers.appDir().orElseThrow(ModernMenuInstaller::notInstalledApp);
 		trustCertificate(appDir.resolve(CER));
 
 		// même version et contenu différent refusés par Add-AppxPackage : on retire l'ancien package
@@ -93,9 +93,13 @@ public final class ModernMenuInstaller {
 		refreshEntries(items, configDir, photoFolder);
 	}
 
+	private static UserException notInstalledApp() {
+		return new UserException("Menu Windows 11 non mis à jour : lancer synoRight.exe (l'application installée) pour le mettre à jour.");
+	}
+
 	/** Réécrit les entrées du menu dans le registre, sans réinstaller le package. */
 	public static void refreshEntries(final List<MenuItem> items, final Path configDir, final String photoFolder) {
-		final String launcher = Launchers.appDir().orElseThrow().resolve(Launchers.GUI_EXE).toString();
+		final String launcher = Launchers.appDir().orElseThrow(ModernMenuInstaller::notInstalledApp).resolve(Launchers.GUI_EXE).toString();
 		ClassicMenuInstaller.importRegFile(buildRegFileContent(items, launcher, configDir, photoFolder));
 	}
 

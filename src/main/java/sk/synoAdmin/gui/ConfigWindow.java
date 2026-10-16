@@ -373,10 +373,8 @@ final class ConfigWindow {
 	}
 
 	/** Tâche de la synchronisation, mise dans la file de la fenêtre (erreur affichée par Gui.runAsync). */
-	private <T> void queue(final Supplier<T> task, final Consumer<T> onSuccess) {
-		async(task, onSuccess, () -> {
-			// erreur déjà affichée
-		});
+	private <T> void queue(final Supplier<T> task, final Consumer<T> onSuccess, final Runnable onFailure) {
+		async(task, onSuccess, onFailure);
 	}
 
 	private void runNext() {

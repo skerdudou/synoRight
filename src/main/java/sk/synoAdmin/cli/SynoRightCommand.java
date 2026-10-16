@@ -10,6 +10,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 import sk.synoAdmin.gui.GuiCommand;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
@@ -61,7 +62,7 @@ public class SynoRightCommand implements Callable<Integer> {
 		spec.commandLine().usage(System.out);
 		if (!Preferences.exists(Preferences.resolveConfigDir(configDir))) {
 			System.out.println();
-			System.out.println("Aucune configuration trouvée : commencer par 'synoRight init'.");
+			System.out.println(Messages.get("cli.main.noConfig"));
 		}
 		return 0;
 	}
@@ -70,7 +71,7 @@ public class SynoRightCommand implements Callable<Integer> {
 		@Override
 		public String[] getVersion() {
 			final String version = SynoRightCommand.class.getPackage().getImplementationVersion();
-			return new String[] { "synoRight " + (version == null ? "(développement)" : version) };
+			return new String[] { "synoRight " + (version == null ? Messages.get("cli.version.development") : version) };
 		}
 	}
 }

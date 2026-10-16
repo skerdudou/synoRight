@@ -13,6 +13,7 @@ import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.engine.FolderRights;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.RightEngine;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
@@ -41,7 +42,7 @@ public final class RightsCommand extends AbstractCommand {
 				.mapToObj(i -> String.valueOf(i + 1)).collect(Collectors.joining(","));
 		Optional<Set<Integer>> selection;
 		do {
-			selection = parseSelection(ConsoleUtil.promptLine("Groupes autorisés (numéros séparés par des virgules, 0 pour aucun)",
+			selection = parseSelection(ConsoleUtil.promptLine(Messages.get("cli.rights.prompt"),
 					current.isEmpty() ? "0" : current), list.size());
 		} while (selection.isEmpty());
 
@@ -50,7 +51,7 @@ public final class RightsCommand extends AbstractCommand {
 		final RightEngine applyEngine = new RightEngine(pref);
 		applyEngine.login();
 		final List<String> messages = applyEngine.setFolderRights(folder, wanted);
-		System.out.println(messages.isEmpty() ? "Aucune modification." : String.join(System.lineSeparator(), messages));
+		System.out.println(messages.isEmpty() ? Messages.get("cli.rights.none") : String.join(System.lineSeparator(), messages));
 	}
 
 	/** Numéros (base 1, 0 ignoré) séparés par virgule/point-virgule/espace, convertis en indices ; vide si invalide. */

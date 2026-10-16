@@ -9,6 +9,7 @@ import sk.synoAdmin.engine.Folder;
 import sk.synoAdmin.engine.FolderRights;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.RightEngine;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.engine.SyncPlan;
 
 /**
@@ -22,25 +23,25 @@ final class RightReports {
 
 	static void printWarnings(final SyncPlan plan) {
 		if (!plan.unindexedFolders().isEmpty()) {
-			System.out.println("Attention, dossiers pas encore indexés par Synology Photos (ignorés) : " + String.join(", ", plan.unindexedFolders()));
+			System.out.println(Messages.get("cli.report.unindexed", String.join(", ", plan.unindexedFolders())));
 		}
 		if (!plan.unknownFolders().isEmpty()) {
-			System.out.println("Attention, dossiers connus de Synology Photos mais absents du partage (ignorés) : " + String.join(", ", plan.unknownFolders()));
+			System.out.println(Messages.get("cli.report.unknown", String.join(", ", plan.unknownFolders())));
 		}
 	}
 
 	/** @param plan plan PUSH : ajouts = dans les fichiers seulement, suppressions = dans Photos seulement */
 	static void printStatus(final SyncPlan plan) {
 		if (plan.isEmpty()) {
-			System.out.println("Fichiers de droits et Synology Photos sont synchronisés (" + plan.folderCount() + " dossiers).");
+			System.out.println(Messages.get("cli.report.synchronized", plan.folderCount()));
 			return;
 		}
 		for (final Map.Entry<Group, GrpDelta> entry : plan.deltas().entrySet()) {
-			System.out.println("Groupe '" + entry.getKey().getName() + "' :");
-			printFolders("Dans les fichiers mais pas dans Synology Photos :", entry.getValue().getToAdd());
-			printFolders("Dans Synology Photos mais pas dans les fichiers :", entry.getValue().getToRemove());
+			System.out.println(Messages.get("cli.report.group", entry.getKey().getName()));
+			printFolders(Messages.get("cli.report.inFilesOnly"), entry.getValue().getToAdd());
+			printFolders(Messages.get("cli.report.inPhotosOnly"), entry.getValue().getToRemove());
 		}
-		System.out.println("-> 'push' applique les fichiers dans Synology Photos, 'pull' recrée les fichiers d'après Synology Photos.");
+		System.out.println(Messages.get("cli.report.statusHint"));
 	}
 
 	private static void printFolders(final String message, final List<Folder> list) {
@@ -54,39 +55,40 @@ final class RightReports {
 
 	static void confirmAndApply(final RightEngine engine, final SyncPlan plan, final boolean assumeYes, final boolean dryRun) {
 		final boolean push = plan.direction() == SyncPlan.Direction.PUSH;
-		System.out.println(push ? "Mise à jour des droits dans Synology Photos d'après les fichiers."
-				: "Mise à jour des fichiers de droits d'après Synology Photos.");
+		System.out.println(Messages.get(push ? "cli.report.applyPush" : "cli.report.applyPull"));
 
 		if (plan.isEmpty()) {
-			System.out.println("Aucune modification à appliquer.");
+			System.out.println(Messages.get("cli.report.nothing"));
 			return;
 		}
 		for (final Map.Entry<Group, GrpDelta> entry : plan.deltas().entrySet()) {
-			System.out.println("Groupe '" + entry.getKey().getName() + "' :");
+			System.out.println(Messages.get("cli.report.group", entry.getKey().getName()));
 			entry.getValue().printAdd();
 			entry.getValue().printRemove();
 		}
 		if (dryRun) {
-			System.out.println("Simulation : aucune modification effectuée.");
+			System.out.println(Messages.get("cli.report.dryRun"));
 			return;
 		}
-		if (!assumeYes && !ConsoleUtil.promptBool("Appliquer ces modifications ?")) {
-			System.out.println("Abandon, aucune modification effectuée.");
+		if (!assumeYes && !ConsoleUtil.promptBool(Messages.get("cli.report.confirm"))) {
+			System.out.println(Messages.get("cli.report.aborted"));
 			return;
 		}
 
 		final int count = engine.apply(plan);
-		System.out.println(push ? "Droits Synology Photos mis à jour." : count + " fichier(s) de droits mis à jour.");
+		System.out.println(push ? Messages.get("cli.report.donePush") : Messages.get("cli.report.donePull", count));
 	}
 
 	static void printFolder(final FolderRights rights) {
-		System.out.println("Dossier " + rights.folderName() + " :");
+		System.out.println(Messages.get("cli.report.folder", rights.folderName()));
 		for (final FolderRights.GroupRight right : rights.rights()) {
-			System.out.println("\t" + right.group().getName() + " : Synology Photos " + (right.inPhotos() ? "oui" : "non")
-					+ ", fichier " + (right.inFile() ? "oui" : "non") + (right.hasGap() ? "   <- écart" : ""));
+			System.out.println("\t" + Messages.get("cli.report.right", right.group().getName(),
+					Messages.get(right.inPhotos() ? "cli.report.yes" : "cli.report.no"),
+					Messages.get(right.inFile() ? "cli.report.yes" : "cli.report.no"),
+					right.hasGap() ? "   " + Messages.get("cli.report.gap") : ""));
 		}
 		if (rights.hasGap()) {
-			System.out.println("Écarts détectés : 'push' ou 'pull' pour resynchroniser.");
+			System.out.println(Messages.get("cli.report.gaps"));
 		}
 	}
 }

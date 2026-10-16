@@ -15,6 +15,7 @@ import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.GroupChecks;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.menu.MenuTarget;
@@ -49,12 +50,12 @@ final class ConfigCommands {
 
 	static String describe(final MenuService.Status status) {
 		if (status.classic() && status.modern()) {
-			return "Windows 11 et classique";
+			return Messages.get("cli.menu.state.both");
 		}
 		if (status.modern()) {
-			return "Windows 11";
+			return Messages.get("cli.menu.state.modern");
 		}
-		return status.classic() ? "classique" : "non installé";
+		return Messages.get(status.classic() ? "cli.menu.state.classic" : "cli.menu.state.none");
 	}
 
 	// les entrées de groupes du menu contextuel suivent la configuration
@@ -62,8 +63,13 @@ final class ConfigCommands {
 		try {
 			MenuService.refresh(pref);
 		} catch (final UserException e) {
-			System.out.println("Menu contextuel non mis à jour (" + e.getMessage() + ") : relancer 'synoRight menu install'.");
+			System.out.println(Messages.get("cli.menu.refreshFailed", e.getMessage()));
 		}
+	}
+
+	// ligne « libellé : valeur » de la commande config, libellés alignés sur les deux-points
+	private static void line(final String label, final Object value) {
+		System.out.println(String.format("%-15s: %s", Messages.get("cli.config.label." + label), value));
 	}
 
 	@Command(name = "config", description = "Affiche la configuration et vérifie l'accès au dossier photos, au NAS et aux groupes.")
@@ -72,19 +78,19 @@ final class ConfigCommands {
 		protected void execute() {
 			final Preferences pref = loadPrefs();
 
-			System.out.println("Fichier        : " + pref.getConfigDir().resolve(Preferences.CONFIG_FILENAME));
-			System.out.println("Dossier photos : " + pref.getNasFolder());
-			System.out.println("URL            : " + pref.getUrl());
-			System.out.println("Compte         : " + pref.getUser());
-			System.out.println("Mot de passe   : " + (pref.getPassword() == null ? "non mémorisé (demandé à chaque connexion)" : "mémorisé (chiffré)"));
-			System.out.println("Groupes        : " + describeGroups(pref.getGroups()));
-			System.out.println("Certificat     : " + (pref.getCertFingerprint() == null
-					? "validation standard" : "auto-signé accepté (SHA-256 " + pref.getCertFingerprint() + ")"));
-			System.out.println("Verbose        : " + pref.isVerbose());
-			System.out.println("Session        : " + (pref.getSession().getCookieSession() == null ? "aucune" : "mémorisée"));
-			System.out.println("Menu Explorer  : " + describe(MenuService.status()));
-			System.out.println("Menu Windows 11: " + pref.getMenuEntries(true).stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
-			System.out.println("Menu classique : " + pref.getMenuEntries(false).stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
+			line("file", pref.getConfigDir().resolve(Preferences.CONFIG_FILENAME));
+			line("photoFolder", pref.getNasFolder());
+			line("url", pref.getUrl());
+			line("account", pref.getUser());
+			line("password", Messages.get(pref.getPassword() == null ? "cli.config.passwordNotStored" : "cli.config.passwordStored"));
+			line("groups", describeGroups(pref.getGroups()));
+			line("certificate", pref.getCertFingerprint() == null
+					? Messages.get("cli.config.certStandard") : Messages.get("cli.config.certSelfSigned", pref.getCertFingerprint()));
+			line("verbose", pref.isVerbose());
+			line("session", Messages.get(pref.getSession().getCookieSession() == null ? "cli.config.sessionNone" : "cli.config.sessionStored"));
+			line("explorerMenu", describe(MenuService.status()));
+			line("menuWin11", pref.getMenuEntries(true).stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
+			line("menuClassic", pref.getMenuEntries(false).stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
 			System.out.println();
 
 			boolean folderOk;
@@ -93,15 +99,15 @@ final class ConfigCommands {
 			} catch (final InvalidPathException e) {
 				folderOk = false;
 			}
-			System.out.println("Dossier photos : " + (folderOk ? "accessible" : "INACCESSIBLE"));
+			line("photoFolder", Messages.get(folderOk ? "cli.config.folderOk" : "cli.config.folderKo"));
 
 			final SynoApiClient client = new SynoApiClient(pref);
 			client.login();
-			System.out.println("Connexion NAS  : OK");
+			line("nasConnection", Messages.get("cli.config.ok"));
 			if (checkGroups(client.getGroups(), pref.getGroups())) {
-				System.out.println("Groupes        : OK");
+				line("groups", Messages.get("cli.config.ok"));
 			} else {
-				System.out.println("-> corriger avec 'synoRight groups add/remove' ou 'synoRight init'.");
+				System.out.println(Messages.get("cli.config.fix"));
 			}
 		}
 	}
@@ -129,8 +135,8 @@ final class ConfigCommands {
 		String name = existing == null ? nasGroup.name() : existing.getGroupById(id).map(Group::getName).orElse(nasGroup.name());
 		String reason = GroupChecks.invalidShortName(name, chosen, id);
 		while (reason != null) {
-			System.out.println("Nom « " + name + " » inutilisable pour les fichiers de droits (" + reason + ").");
-			name = ConsoleUtil.promptLine("Nom court du groupe '" + nasGroup.name() + "' (fichiers @<nom>.synoRight) :");
+			System.out.println(Messages.get("cli.groups.shortNameUnusable", name, reason));
+			name = ConsoleUtil.promptLine(Messages.get("cli.groups.shortNamePrompt", nasGroup.name()));
 			reason = GroupChecks.invalidShortName(name, chosen, id);
 		}
 		return new Group(id, name.trim());
@@ -149,17 +155,17 @@ final class ConfigCommands {
 					.sorted(Comparator.comparing(SynoGroup::name, String.CASE_INSENSITIVE_ORDER))
 					.toList();
 			if (candidates.isEmpty()) {
-				System.out.println("Tous les groupes du NAS sont déjà gérés.");
+				System.out.println(Messages.get("cli.groups.allManaged"));
 				return;
 			}
 
 			final List<Group> groups = new ArrayList<>(pref.getGroups());
-			for (final int index : ConsoleUtil.promptChoices("Groupes à ajouter", candidates.stream().map(SynoGroup::name).toList())) {
+			for (final int index : ConsoleUtil.promptChoices(Messages.get("cli.groups.prompt.add"), candidates.stream().map(SynoGroup::name).toList())) {
 				groups.add(toGroup(candidates.get(index), null, groups));
 			}
 			pref.setGroups(groups);
 			pref.save();
-			System.out.println("Groupes gérés : " + describeGroups(pref.getGroups()));
+			System.out.println(Messages.get("cli.groups.managed", describeGroups(pref.getGroups())));
 			refreshMenu(pref);
 		}
 	}
@@ -171,7 +177,7 @@ final class ConfigCommands {
 			final Preferences pref = loadPrefs();
 			final List<Group> current = pref.getGroups();
 
-			final List<Integer> toRemove = ConsoleUtil.promptChoices("Groupes à retirer", current.stream().map(Group::getName).toList());
+			final List<Integer> toRemove = ConsoleUtil.promptChoices(Messages.get("cli.groups.prompt.remove"), current.stream().map(Group::getName).toList());
 			final List<Group> groups = new ArrayList<>();
 			for (int i = 0; i < current.size(); i++) {
 				if (!toRemove.contains(i)) {
@@ -180,7 +186,7 @@ final class ConfigCommands {
 			}
 			pref.setGroups(groups);
 			pref.save();
-			System.out.println("Groupes gérés : " + describeGroups(pref.getGroups()));
+			System.out.println(Messages.get("cli.groups.managed", describeGroups(pref.getGroups())));
 			refreshMenu(pref);
 		}
 	}
@@ -196,11 +202,11 @@ final class ConfigCommands {
 			if (forget) {
 				pref.setPassword(null);
 				pref.save();
-				System.out.println("Mot de passe oublié.");
+				System.out.println(Messages.get("cli.password.forgotten"));
 				return;
 			}
 
-			final String[] password = { ConsoleUtil.promptSecret("Nouveau mot de passe de " + pref.getUser() + " :") };
+			final String[] password = { ConsoleUtil.promptSecret(Messages.get("cli.password.prompt", pref.getUser())) };
 			// vrai login sur une session de travail pour vérifier le mot de passe (le device id évite l'OTP)
 			final Session workSession = pref.getSession().transientCopy(true);
 			new SynoApiClient(pref.getUrl(), pref.getUser(), password[0], false, workSession, pref.getCertFingerprint(),
@@ -209,7 +215,7 @@ final class ConfigCommands {
 			pref.getSession().replaceWith(workSession);
 			pref.setPassword(password[0]);
 			pref.save();
-			System.out.println("Mot de passe vérifié et mémorisé.");
+			System.out.println(Messages.get("cli.password.saved"));
 		}
 	}
 
@@ -218,7 +224,7 @@ final class ConfigCommands {
 		@Override
 		protected void execute() {
 			Session.load(configDir()).clear();
-			System.out.println("Session oubliée.");
+			System.out.println(Messages.get("cli.logout.done"));
 		}
 	}
 
@@ -226,8 +232,7 @@ final class ConfigCommands {
 	static final class Menu extends AbstractCommand {
 		@Override
 		protected void execute() {
-			System.out.println("Menu contextuel : " + describe(MenuService.status())
-					+ ". Utiliser 'menu install [--modern|--classic|--all]' ou 'menu uninstall'.");
+			System.out.println(Messages.get("cli.menu.status", describe(MenuService.status())));
 		}
 	}
 
@@ -268,7 +273,7 @@ final class ConfigCommands {
 		@Override
 		protected void execute() {
 			MenuService.uninstall();
-			System.out.println("Menu contextuel désinstallé.");
+			System.out.println(Messages.get("cli.menu.uninstalled"));
 		}
 	}
 }

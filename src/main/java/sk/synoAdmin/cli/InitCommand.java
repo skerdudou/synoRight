@@ -12,6 +12,7 @@ import picocli.CommandLine.Command;
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
@@ -33,10 +34,10 @@ final class InitCommand extends AbstractCommand {
 		final Preferences existing = loadExisting(dir);
 
 		if (existing != null) {
-			System.out.println("Modification de la configuration " + dir.resolve(Preferences.CONFIG_FILENAME));
-			System.out.println("(Entrée seule conserve la valeur entre crochets.)");
+			System.out.println(Messages.get("cli.init.modify", dir.resolve(Preferences.CONFIG_FILENAME)));
+			System.out.println(Messages.get("cli.init.keepHint"));
 		} else {
-			System.out.println("Création de la configuration dans " + dir);
+			System.out.println(Messages.get("cli.init.create", dir));
 		}
 
 		// 1. connexion, validée avant de poser les autres questions
@@ -48,19 +49,19 @@ final class InitCommand extends AbstractCommand {
 		String fingerprint = existing == null ? null : existing.getCertFingerprint();
 		SynoApiClient client;
 		while (true) {
-			url = ConnectionCheck.normalizeUrl(ConsoleUtil.promptLine("URL de DSM (ex : https://nas.example.com:5001) :", url));
-			user = ConsoleUtil.promptLine("Compte (administrateur de Synology Photos) :", user);
+			url = ConnectionCheck.normalizeUrl(ConsoleUtil.promptLine(Messages.get("cli.init.prompt.url"), url));
+			user = ConsoleUtil.promptLine(Messages.get("cli.init.prompt.user"), user);
 
 			final boolean sameAccount = existing != null && url.equals(ConnectionCheck.normalizeUrl(existing.getUrl())) && user.equals(existing.getUser());
 			final boolean keepPassword;
 			if (sameAccount && existing.getPassword() != null) {
-				password[0] = ConsoleUtil.promptSecretOrKeep("Mot de passe (Entrée pour conserver l'actuel) :");
+				password[0] = ConsoleUtil.promptSecretOrKeep(Messages.get("cli.init.prompt.passwordKeep"));
 				keepPassword = password[0] == null;
 				if (keepPassword) {
 					password[0] = existing.getPassword();
 				}
 			} else {
-				password[0] = ConsoleUtil.promptSecret("Mot de passe :");
+				password[0] = ConsoleUtil.promptSecret(Messages.get("cli.init.prompt.password"));
 				keepPassword = false;
 			}
 
@@ -71,13 +72,13 @@ final class InitCommand extends AbstractCommand {
 				workSession = result.workSession();
 				password[0] = result.password();
 				fingerprint = result.fingerprint();
-				System.out.println("Connexion OK.");
+				System.out.println(Messages.get("cli.init.connected"));
 				break;
 			} catch (final UserException e) {
 				System.out.println(e.getMessage());
 			}
-			if (!ConsoleUtil.promptBool("Réessayer ?")) {
-				throw new UserException("Configuration abandonnée, rien n'a été enregistré.");
+			if (!ConsoleUtil.promptBool(Messages.get("cli.init.retry"))) {
+				throw new UserException(Messages.get("cli.init.aborted"));
 			}
 		}
 
@@ -89,26 +90,26 @@ final class InitCommand extends AbstractCommand {
 
 		// mot de passe volontairement non mémorisé (password --forget) : on redemande
 		final boolean storePassword = existing == null || existing.getPassword() != null
-				|| ConsoleUtil.promptBool("Mémoriser le mot de passe dans la configuration ?");
+				|| ConsoleUtil.promptBool(Messages.get("cli.init.storePassword"));
 
 		session.replaceWith(workSession);
 		final Preferences pref = new Preferences(dir, folder, url, user, storePassword ? password[0] : null, groups, existing != null && existing.isVerbose());
 		pref.setCertFingerprint(fingerprint);
 		pref.save();
-		System.out.println("Configuration enregistrée : " + dir.resolve(Preferences.CONFIG_FILENAME));
+		System.out.println(Messages.get("cli.init.saved", dir.resolve(Preferences.CONFIG_FILENAME)));
 
 		// 4. menu contextuel
 		if (System.getProperty("os.name", "").toLowerCase().startsWith("windows")
-				&& ConsoleUtil.promptBool("Installer (ou mettre à jour) le menu contextuel de l'Explorateur ?")) {
+				&& ConsoleUtil.promptBool(Messages.get("cli.init.installMenu"))) {
 			try {
 				System.out.println(MenuService.install(pref, MenuService.effectiveTarget(pref)));
 			} catch (final UserException e) {
-				System.out.println("Menu non installé : " + e.getMessage());
+				System.out.println(Messages.get("cli.init.menuNotInstalled", e.getMessage()));
 			}
 		}
 
 		System.out.println();
-		System.out.println("Terminé. 'synoRight status' affiche l'état des droits, 'synoRight --help' liste les commandes ; synoRightGui ouvre l'interface graphique.");
+		System.out.println(Messages.get("cli.init.done"));
 	}
 
 	private static Preferences loadExisting(final Path dir) {
@@ -118,14 +119,14 @@ final class InitCommand extends AbstractCommand {
 		try {
 			return Preferences.fromFile(dir);
 		} catch (final UserException e) {
-			System.out.println("Configuration existante illisible (" + e.getMessage() + ") : elle sera remplacée.");
+			System.out.println(Messages.get("cli.init.unreadable", e.getMessage()));
 			return null;
 		}
 	}
 
 	private static String promptFolder(final String defaultValue) {
 		while (true) {
-			final String folder = ConsoleUtil.promptLine("Dossier des photos sur le NAS, vu depuis ce poste (ex : \\\\NAS\\photo) :", defaultValue);
+			final String folder = ConsoleUtil.promptLine(Messages.get("cli.init.prompt.folder"), defaultValue);
 			try {
 				if (Files.isDirectory(Paths.get(folder))) {
 					return folder;
@@ -133,7 +134,7 @@ final class InitCommand extends AbstractCommand {
 			} catch (final InvalidPathException e) {
 				// message ci-dessous
 			}
-			System.out.println("Dossier introuvable ou inaccessible : " + folder);
+			System.out.println(Messages.get("cli.init.folderNotFound", folder));
 		}
 	}
 
@@ -142,24 +143,24 @@ final class InitCommand extends AbstractCommand {
 				.sorted(Comparator.comparing(SynoGroup::name, String.CASE_INSENSITIVE_ORDER))
 				.toList();
 		if (nasGroups.isEmpty()) {
-			throw new UserException("Aucun groupe local trouvé sur le NAS : en créer un dans DSM puis relancer init.");
+			throw new UserException(Messages.get("cli.init.noGroup"));
 		}
 
 		if (existing != null) {
-			System.out.println("Groupes actuels : " + ConfigCommands.describeGroups(existing.getGroups()));
-			if (ConsoleUtil.promptBool("Conserver ces groupes ?")) {
+			System.out.println(Messages.get("cli.init.currentGroups", ConfigCommands.describeGroups(existing.getGroups())));
+			if (ConsoleUtil.promptBool(Messages.get("cli.init.keepGroups"))) {
 				ConfigCommands.checkGroups(nasGroups, existing.getGroups());
 				return existing.getGroups();
 			}
 		}
 
-		System.out.println("Groupes du NAS :");
+		System.out.println(Messages.get("cli.init.nasGroups"));
 		final List<String> labels = nasGroups.stream()
-				.map(g -> g.name() + (existing != null && existing.getGroupById(String.valueOf(g.gid())).isPresent() ? " (actuel)" : ""))
+				.map(g -> g.name() + (existing != null && existing.getGroupById(String.valueOf(g.gid())).isPresent() ? " " + Messages.get("cli.init.groupCurrent") : ""))
 				.toList();
 		// groupe déjà géré : son nom court (nom des fichiers de droits) est conservé
 		final List<Group> groups = new ArrayList<>();
-		for (final int index : ConsoleUtil.promptChoices("Groupes à gérer", labels)) {
+		for (final int index : ConsoleUtil.promptChoices(Messages.get("cli.init.prompt.groups"), labels)) {
 			groups.add(ConfigCommands.toGroup(nasGroups.get(index), existing, groups));
 		}
 		return groups;

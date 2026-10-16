@@ -16,6 +16,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.menu.MenuEntry;
+import sk.synoAdmin.menu.MenuTarget;
 
 class PreferencesTest {
 
@@ -35,6 +37,45 @@ class PreferencesTest {
 
 	private Preferences readPrefs() {
 		return Preferences.fromFile(tempDir);
+	}
+
+	@Test
+	void menu_parDefautEntreesStandardEtCibleAutomatique(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, "\\\\NAS\\photo", "https://nas", "admin", null, List.of(new Group("3", "famille")), false);
+		pref.save();
+
+		final Preferences reloaded = Preferences.fromFile(dir);
+		assertEquals(List.of(MenuEntry.RIGHTS, MenuEntry.STATUS, MenuEntry.PUSH, MenuEntry.CONFIG), reloaded.getMenuEntries());
+		assertNull(reloaded.getMenuTarget());
+	}
+
+	@Test
+	void menu_entreesEtCibleRelues(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, "\\\\NAS\\photo", "https://nas", "admin", null, List.of(new Group("3", "famille")), false);
+		pref.setMenuEntries(List.of(MenuEntry.GROUPS, MenuEntry.RIGHTS));
+		pref.setMenuTarget(MenuTarget.ALL);
+		pref.save();
+
+		final Preferences reloaded = Preferences.fromFile(dir);
+		assertEquals(List.of(MenuEntry.GROUPS, MenuEntry.RIGHTS), reloaded.getMenuEntries());
+		assertEquals(MenuTarget.ALL, reloaded.getMenuTarget());
+	}
+
+	@Test
+	void menu_idInconnuIgnore(@TempDir final Path dir) throws IOException {
+		Files.writeString(dir.resolve(Preferences.CONFIG_FILENAME),
+				"folder=x\nurl=https://nas\nuser=admin\ngroups=3:famille\nmenuEntries=rights, futur ,push\nmenuTarget=bidon\n");
+
+		final Preferences pref = Preferences.fromFile(dir);
+		assertEquals(List.of(MenuEntry.RIGHTS, MenuEntry.PUSH), pref.getMenuEntries());
+		assertNull(pref.getMenuTarget());
+	}
+
+	@Test
+	void fromFile_absent_messageIndiqueLaConfiguration(@TempDir final Path dir) {
+		final UserException e = assertThrows(UserException.class, () -> Preferences.fromFile(dir));
+		assertTrue(e.getMessage().contains("synoRightGui"));
+		assertTrue(e.getMessage().contains("synoRight init"));
 	}
 
 	@Test

@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,8 @@ import java.util.stream.Collectors;
 
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.menu.MenuEntry;
+import sk.synoAdmin.menu.MenuTarget;
 
 public class Preferences {
 
@@ -29,6 +32,10 @@ public class Preferences {
 	private final Session session;
 	// empreinte SHA-256 d'un certificat auto-signé du NAS à accepter (null : validation standard)
 	private String certFingerprint;
+	// entrées du menu contextuel de l'Explorateur
+	private List<MenuEntry> menuEntries = MenuEntry.defaults();
+	// menu(s) à installer (null : automatique selon la version de Windows)
+	private MenuTarget menuTarget;
 
 	public Preferences(final Path configDir, final String nasFolder, final String url, final String user, final String password, final List<Group> groups, final boolean verbose) {
 		this(configDir, nasFolder, url, user, password, groups, verbose, Session.load(configDir));
@@ -82,7 +89,7 @@ public class Preferences {
 		final Path configFile = configDir.resolve(CONFIG_FILENAME);
 		if (!Files.isRegularFile(configFile)) {
 			throw new UserException("Fichier de configuration introuvable : " + configFile
-					+ ". Lancer 'synoRight init' pour le créer (ou indiquer son répertoire avec -c).");
+					+ ". Le créer avec l'application synoRightGui (ou 'synoRight init' en console), ou indiquer son répertoire avec -c.");
 		}
 
 		final Properties prop;
@@ -112,6 +119,17 @@ public class Preferences {
 		final Preferences preferences = new Preferences(configDir, folder, url, user, password, groups, verbose, session);
 		final String fingerprint = prop.getProperty("certFingerprint");
 		preferences.certFingerprint = fingerprint == null || fingerprint.isBlank() ? null : fingerprint.trim();
+		final String entries = prop.getProperty("menuEntries");
+		if (entries != null) {
+			preferences.menuEntries = Arrays.stream(entries.split(","))
+					.filter(s -> !s.isBlank())
+					.map(MenuEntry::fromId)
+					.flatMap(Optional::stream)
+					.distinct()
+					.toList();
+		}
+		final String target = prop.getProperty("menuTarget");
+		preferences.menuTarget = target == null ? null : MenuTarget.fromId(target).orElse(null);
 
 		// migration de la session historiquement stockée dans la configuration
 		final boolean sessionInConfig = session.importFromConfig(prop);
@@ -177,10 +195,15 @@ public class Preferences {
 		if (certFingerprint != null) {
 			prop.setProperty("certFingerprint", certFingerprint);
 		}
+		prop.setProperty("menuEntries", menuEntries.stream().map(MenuEntry::id).collect(Collectors.joining(",")));
+		if (menuTarget != null) {
+			prop.setProperty("menuTarget", menuTarget.id());
+		}
 
 		try {
 			PropertiesFiles.store(configDir.resolve(CONFIG_FILENAME), prop,
-					"Configuration synoRight (groups=id:nom;id:nom, verbose=true pour les temps de traitement)");
+					"Configuration synoRight (groups=id:nom;id:nom, verbose=true pour les temps de traitement,"
+						+ " menuEntries=rights,status,... menuTarget=modern|classic|all)");
 		} catch (final IOException e) {
 			throw new RuntimeException("Impossible d'écrire les préférences", e);
 		}
@@ -236,6 +259,31 @@ public class Preferences {
 	 */
 	public void setCertFingerprint(final String certFingerprint) {
 		this.certFingerprint = certFingerprint;
+	}
+
+	public List<MenuEntry> getMenuEntries() {
+		return menuEntries;
+	}
+
+	/**
+	 * Change les entrées du menu contextuel ; appeler save() pour persister.
+	 */
+	public void setMenuEntries(final List<MenuEntry> menuEntries) {
+		this.menuEntries = List.copyOf(menuEntries);
+	}
+
+	/**
+	 * Menu(s) à installer ; null pour le choix automatique.
+	 */
+	public MenuTarget getMenuTarget() {
+		return menuTarget;
+	}
+
+	/**
+	 * Change le(s) menu(s) à installer (null : automatique) ; appeler save() pour persister.
+	 */
+	public void setMenuTarget(final MenuTarget menuTarget) {
+		this.menuTarget = menuTarget;
 	}
 
 	public boolean isVerbose() {

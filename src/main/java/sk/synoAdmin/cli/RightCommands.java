@@ -21,7 +21,7 @@ final class RightCommands {
 	@Command(name = "status", description = "Affiche les écarts entre les fichiers de droits et Synology Photos, sans rien modifier.")
 	static final class Status extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.getFullState();
 			final SyncPlan plan = re.planPush();
@@ -44,7 +44,7 @@ final class RightCommands {
 	@Command(name = "pull", description = "Synology Photos -> fichiers : crée/supprime les fichiers .synoRight d'après les droits de Synology Photos.")
 	static final class Pull extends FullSync {
 		@Override
-		void execute() {
+		protected void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.getFullState();
 			final SyncPlan plan = re.planPull();
@@ -56,7 +56,7 @@ final class RightCommands {
 	@Command(name = "push", description = "Fichiers -> Synology Photos : applique dans Synology Photos les droits décrits par les fichiers .synoRight.")
 	static final class Push extends FullSync {
 		@Override
-		void execute() {
+		protected void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.getFullState();
 			final SyncPlan plan = re.planPush();
@@ -71,7 +71,7 @@ final class RightCommands {
 		String folder;
 
 		@Override
-		void execute() {
+		protected void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.checkFolder(folder); // avant toute connexion
 			re.login();
@@ -88,7 +88,7 @@ final class RightCommands {
 		String folder;
 
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 			final Group grp = pref.getGroupByName(group); // vérifié avant toute connexion
 			final RightEngine re = new RightEngine(pref);
@@ -107,7 +107,7 @@ final class RightCommands {
 		String folder;
 
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 			final Group grp = pref.getGroupByName(group); // vérifié avant toute connexion
 			final RightEngine re = new RightEngine(pref);

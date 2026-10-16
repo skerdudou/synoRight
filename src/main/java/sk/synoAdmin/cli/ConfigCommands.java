@@ -82,7 +82,7 @@ final class ConfigCommands {
 	@Command(name = "config", description = "Affiche la configuration et vérifie l'accès au dossier photos, au NAS et aux groupes.")
 	static final class Config extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 
 			System.out.println("Fichier        : " + pref.getConfigDir().resolve(Preferences.CONFIG_FILENAME));
@@ -121,7 +121,7 @@ final class ConfigCommands {
 	@Command(name = "groups", description = "Liste les groupes gérés.", subcommands = { GroupsAdd.class, GroupsRemove.class })
 	static final class Groups extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 			for (final Group grp : pref.getGroups()) {
 				System.out.println(grp.getName() + " (id " + grp.getId() + ")");
@@ -132,7 +132,7 @@ final class ConfigCommands {
 	@Command(name = "add", description = "Ajoute des groupes, choisis parmi ceux du NAS.")
 	static final class GroupsAdd extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 			final SynoApiClient client = new SynoApiClient(pref);
 			client.login();
@@ -161,7 +161,7 @@ final class ConfigCommands {
 	@Command(name = "remove", description = "Retire des groupes de la configuration (sans toucher aux droits ni aux fichiers existants).")
 	static final class GroupsRemove extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 			final List<Group> current = pref.getGroups();
 
@@ -185,7 +185,7 @@ final class ConfigCommands {
 		boolean forget;
 
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 			if (forget) {
 				pref.setPassword(null);
@@ -210,7 +210,7 @@ final class ConfigCommands {
 	@Command(name = "logout", description = "Oublie la session Synology mémorisée (le prochain login redemandera l'OTP).")
 	static final class Logout extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			Session.load(configDir()).clear();
 			System.out.println("Session oubliée.");
 		}
@@ -219,7 +219,7 @@ final class ConfigCommands {
 	@Command(name = "menu", description = "Menu contextuel de l'Explorateur Windows.", subcommands = { MenuInstall.class, MenuUninstall.class })
 	static final class Menu extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			System.out.println("Menu contextuel : " + describe(MenuService.status())
 					+ ". Utiliser 'menu install [--modern|--classic|--all]' ou 'menu uninstall'.");
 		}
@@ -247,7 +247,7 @@ final class ConfigCommands {
 		}
 
 		@Override
-		void execute() {
+		protected void execute() {
 			final Preferences pref = loadPrefs();
 			if (target() != null) {
 				pref.setMenuTarget(target());
@@ -260,7 +260,7 @@ final class ConfigCommands {
 	@Command(name = "uninstall", description = "Désinstalle le menu contextuel.")
 	static final class MenuUninstall extends AbstractCommand {
 		@Override
-		void execute() {
+		protected void execute() {
 			MenuService.uninstall();
 			System.out.println("Menu contextuel désinstallé.");
 		}

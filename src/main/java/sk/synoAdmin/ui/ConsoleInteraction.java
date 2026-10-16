@@ -12,7 +12,7 @@ import java.util.Set;
 /**
  * Saisies utilisateur sur la console.
  */
-public final class ConsoleInteraction implements Interaction {
+public class ConsoleInteraction implements Interaction {
 
 	private final Scanner stdin;
 

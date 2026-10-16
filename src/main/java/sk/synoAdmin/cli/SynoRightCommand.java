@@ -9,6 +9,7 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
+import sk.synoAdmin.gui.GuiCommand;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
@@ -29,7 +30,8 @@ import sk.synoAdmin.prefs.Preferences;
 				ConfigCommands.Groups.class,
 				ConfigCommands.Password.class,
 				ConfigCommands.Logout.class,
-				ConfigCommands.Menu.class })
+				ConfigCommands.Menu.class,
+				GuiCommand.class })
 public class SynoRightCommand implements Callable<Integer> {
 
 	@Option(names = { "-c", "--config" }, scope = ScopeType.INHERIT, paramLabel = "<dossier>",
@@ -47,6 +49,11 @@ public class SynoRightCommand implements Callable<Integer> {
 
 	@Spec
 	CommandSpec spec;
+
+	/** Répertoire de configuration demandé (option -c), ou null. */
+	public Path configDir() {
+		return configDir;
+	}
 
 	@Override
 	public Integer call() {

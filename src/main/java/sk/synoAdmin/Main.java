@@ -6,10 +6,25 @@ import java.util.Arrays;
 
 import picocli.CommandLine;
 import sk.synoAdmin.cli.SynoRightCommand;
+import sk.synoAdmin.ui.Interaction;
 
 public class Main {
 
 	public static void main(final String[] args) {
+		final int exitCode = run(args);
+
+		// pause seulement pour la fenêtre du menu contextuel (et pour les anciens menus, qui doivent afficher le message)
+		if (isLegacySyntax(args) || Arrays.asList(args).contains("--pause")) {
+			ConsoleUtil.pauseBeforeExit();
+		}
+
+		if (exitCode != 0) {
+			System.exit(exitCode);
+		}
+	}
+
+	/** Exécute la ligne de commande et renvoie le code de sortie (sans quitter la JVM). */
+	static int run(final String[] args) {
 		final long start = System.nanoTime();
 		final int exitCode;
 
@@ -31,29 +46,19 @@ public class Main {
 		if (LogUtil.isVerbose()) {
 			System.out.println("Total time : " + (System.nanoTime() - start) / 1_000_000 + " ms");
 		}
-
-		// pause seulement pour la fenêtre du menu contextuel (et pour les anciens menus, qui doivent afficher le message)
-		if (isLegacySyntax(args) || Arrays.asList(args).contains("--pause")) {
-			ConsoleUtil.pauseBeforeExit();
-		}
-
-		if (exitCode != 0) {
-			System.exit(exitCode);
-		}
+		return exitCode;
 	}
 
-	// erreur prévue : message seul ; imprévue : message, stack trace en mode verbeux
-	private static int handleError(final Exception e) {
+	// erreur prévue : message seul ; imprévue : message, détail en mode verbeux (toujours dans l'IHM)
+	static int handleError(final Exception e) {
+		final Interaction ui = ConsoleUtil.interaction();
 		if (e instanceof UserException) {
-			System.err.println(e.getMessage());
-			if (LogUtil.isVerbose() && e.getCause() != null) {
-				e.getCause().printStackTrace();
-			}
+			ui.error(e.getMessage(), LogUtil.isVerbose() ? e.getCause() : null);
+		} else if (ui.isGraphical()) {
+			ui.error("Erreur inattendue : " + e, e);
 		} else {
-			System.err.println("Erreur inattendue : " + e);
-			if (LogUtil.isVerbose()) {
-				e.printStackTrace();
-			} else {
+			ui.error("Erreur inattendue : " + e, LogUtil.isVerbose() ? e : null);
+			if (!LogUtil.isVerbose()) {
 				System.err.println("(relancer avec -v pour le détail)");
 			}
 		}

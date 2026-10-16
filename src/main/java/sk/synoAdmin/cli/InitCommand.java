@@ -31,7 +31,7 @@ import sk.synoAdmin.synology.TrustedCertificate;
 final class InitCommand extends AbstractCommand {
 
 	@Override
-	void execute() {
+	protected void execute() {
 		final Path dir = configDir();
 		final Preferences existing = loadExisting(dir);
 

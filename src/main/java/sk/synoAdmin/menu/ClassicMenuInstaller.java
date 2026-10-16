@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuDefinition.MenuItem;
 
 /**
@@ -96,10 +97,10 @@ public final class ClassicMenuInstaller {
 			Files.writeString(regFile, (char) 0xFEFF + content, StandardCharsets.UTF_16LE);
 			final ProcessRunner.Result result = ProcessRunner.run(List.of("reg", "import", regFile.toString()));
 			if (!result.ok()) {
-				throw new UserException("Échec de l'import dans le registre : " + result.output());
+				throw new UserException(Messages.get("menu.install.regImportFailed", result.output()));
 			}
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible d'écrire le fichier .reg temporaire", e);
+			throw new RuntimeException(Messages.get("menu.install.regFileError"), e);
 		} finally {
 			if (regFile != null) {
 				try {
@@ -132,7 +133,7 @@ public final class ClassicMenuInstaller {
 
 	private static void checkWindows() {
 		if (!ProcessRunner.isWindows()) {
-			throw new UserException("Le menu contextuel n'est disponible que sous Windows (OS détecté : " + System.getProperty("os.name", "") + ").");
+			throw new UserException(Messages.get("menu.install.windowsOnly", System.getProperty("os.name", "")));
 		}
 	}
 }

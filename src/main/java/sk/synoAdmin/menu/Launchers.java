@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 
 /**
  * Lanceurs de l'application : exe jpackage (synoRight.exe console, synoRightGui.exe sans console) ou jar.
@@ -29,7 +30,7 @@ public final class Launchers {
 			return List.of(Paths.get(appPath).resolveSibling(GUI_EXE).toString());
 		}
 		if (jarLocation == null || !jarLocation.getFileName().toString().endsWith(".jar")) {
-			throw new UserException("Impossible de déterminer le jar : lancé depuis '" + jarLocation + "'. Lancer l'installation depuis le jar ou l'exe.");
+			throw new UserException(Messages.get("menu.install.jarUnknown", jarLocation));
 		}
 		return List.of(javaHome.resolve("bin").resolve("javaw.exe").toString(), "-jar", jarLocation.toString(), "gui");
 	}

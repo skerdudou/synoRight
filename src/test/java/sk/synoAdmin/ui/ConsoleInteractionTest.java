@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -13,6 +15,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import sk.synoAdmin.ConsoleUtil;
+import sk.synoAdmin.i18n.Language;
+import sk.synoAdmin.i18n.Messages;
 
 class ConsoleInteractionTest {
 
@@ -44,6 +48,33 @@ class ConsoleInteractionTest {
 	void promptBool_ouiNon() {
 		assertTrue(input("peut-être", "o").promptBool("?"));
 		assertFalse(input("non").promptBool("?"));
+	}
+
+	@Test
+	void promptBool_reponsesAnglaisesEtFrancaisesToujoursAcceptees() {
+		assertTrue(input("YES").promptBool("?"));
+		assertTrue(input("y").promptBool("?"));
+		assertTrue(input("Oui").promptBool("?"));
+		assertFalse(input("no").promptBool("?"));
+		assertFalse(input("N").promptBool("?"));
+	}
+
+	@Test
+	void promptBool_indiceEtReponsesDeLaLangueCourante() {
+		final PrintStream saved = System.out;
+		final ByteArrayOutputStream out = new ByteArrayOutputStream();
+		System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+		try {
+			assertTrue(input("yes").promptBool("Q"));
+			Messages.setLanguage(Language.FR);
+			assertFalse(input("non").promptBool("Q"));
+		} finally {
+			System.setOut(saved);
+			Messages.setLanguage(Language.EN);
+		}
+		final String output = out.toString(StandardCharsets.UTF_8);
+		assertTrue(output.contains("Q (yes/no)"));
+		assertTrue(output.contains("Q (oui/non)"));
 	}
 
 	@Test

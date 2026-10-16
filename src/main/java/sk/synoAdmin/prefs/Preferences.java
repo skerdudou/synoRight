@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.i18n.Language;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuTarget;
 
@@ -94,15 +95,14 @@ public class Preferences {
 	public static Preferences fromFile(final Path configDir) {
 		final Path configFile = configDir.resolve(CONFIG_FILENAME);
 		if (!Files.isRegularFile(configFile)) {
-			throw new UserException("Fichier de configuration introuvable : " + configFile
-					+ ". Le créer avec l'application synoRightGui (ou 'synoRight init' en console), ou indiquer son répertoire avec -c.");
+			throw new UserException(Messages.get("prefs.config.notFound", configFile));
 		}
 
 		final Properties prop;
 		try {
 			prop = PropertiesFiles.load(configFile);
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible de lire les préférences", e);
+			throw new RuntimeException(Messages.get("prefs.config.readError"), e);
 		}
 
 		final String folder = getRequiredProperty(prop, "folder");
@@ -114,8 +114,7 @@ public class Preferences {
 			try {
 				password = CryptoUtils.decrypt(rawPassword);
 			} catch (final RuntimeException e) {
-				System.out.println("Impossible de déchiffrer le mot de passe stocké (clé changée ?) : il sera demandé à la connexion."
-						+ " Le mémoriser à nouveau avec 'synoRight password'.");
+				System.out.println(Messages.get("prefs.password.undecryptable"));
 			}
 		}
 		final List<Group> groups = parseGroups(getRequiredProperty(prop, "groups"));
@@ -148,10 +147,10 @@ public class Preferences {
 		if (sessionInConfig || legacyPassword) {
 			preferences.save();
 			if (sessionInConfig) {
-				System.out.println("Session déplacée dans " + configDir.resolve(Session.FILENAME) + ".");
+				System.out.println(Messages.get("prefs.session.moved", configDir.resolve(Session.FILENAME)));
 			}
 			if (legacyPassword) {
-				System.out.println("Mot de passe re-chiffré au nouveau format (clé : " + CryptoUtils.keyFile() + ").");
+				System.out.println(Messages.get("prefs.password.reencrypted", CryptoUtils.keyFile()));
 			}
 		}
 
@@ -182,7 +181,7 @@ public class Preferences {
 	private static String getRequiredProperty(final Properties prop, final String key) {
 		final String value = prop.getProperty(key);
 		if (value == null || value.isBlank()) {
-			throw new UserException("Propriété '" + key + "' manquante dans la configuration");
+			throw new UserException(Messages.get("prefs.config.missingProperty", key));
 		}
 		return value.trim();
 	}
@@ -207,14 +206,14 @@ public class Preferences {
 		for (final String groupString : groupsString.split(";")) {
 			final String[] groupSplit = groupString.split(":");
 			if (groupSplit.length != 2) {
-				throw new UserException("Format des groupes incorrect dans la configuration (attendu : id:nom;id:nom)");
+				throw new UserException(Messages.get("prefs.config.badGroups"));
 			}
 
 			groups.add(new Group(groupSplit[0].trim(), groupSplit[1].trim()));
 		}
 
 		if (groups.isEmpty()) {
-			throw new UserException("Aucun groupe de configuré !");
+			throw new UserException(Messages.get("prefs.config.noGroup"));
 		}
 		return groups;
 	}
@@ -251,7 +250,7 @@ public class Preferences {
 						+ " menuEntries.modern / menuEntries.classic=rights,status,... menuTarget=modern|classic|all,"
 							+ " language=auto|en|fr|de|es|it)");
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible d'écrire les préférences", e);
+			throw new RuntimeException(Messages.get("prefs.config.writeError"), e);
 		}
 	}
 
@@ -291,7 +290,7 @@ public class Preferences {
 	 */
 	public void setGroups(final List<Group> groups) {
 		if (groups.isEmpty()) {
-			throw new UserException("Au moins un groupe doit être configuré.");
+			throw new UserException(Messages.get("prefs.groups.atLeastOne"));
 		}
 		this.groups = List.copyOf(groups);
 	}
@@ -369,8 +368,7 @@ public class Preferences {
 		return groups.stream()
 				.filter(g -> g.getName().equalsIgnoreCase(name))
 				.findAny()
-				.orElseThrow(() -> new UserException("Groupe '" + name + "' non configuré. Groupes disponibles : "
-						+ groups.stream().map(Group::getName).collect(Collectors.joining(", "))));
+				.orElseThrow(() -> new UserException(Messages.get("prefs.group.unknown", name, groups.stream().map(Group::getName).collect(Collectors.joining(", ")))));
 	}
 
 	public Optional<Group> getGroupById(final String id) {

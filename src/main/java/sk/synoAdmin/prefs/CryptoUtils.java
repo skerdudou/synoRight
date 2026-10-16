@@ -21,6 +21,8 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import sk.synoAdmin.i18n.Messages;
+
 /**
  * Chiffrement du mot de passe en AES-256-GCM avec une clé aléatoire propre au poste,
  * stockée dans ~/.synoRight/key avec des permissions restreintes au propriétaire
@@ -72,7 +74,7 @@ public final class CryptoUtils {
 
 			return CURRENT_PREFIX + Base64.getEncoder().encodeToString(payload);
 		} catch (final Exception e) {
-			throw new RuntimeException("Impossible de chiffrer le mot de passe", e);
+			throw new RuntimeException(Messages.get("prefs.crypto.encryptError"), e);
 		}
 	}
 
@@ -98,7 +100,7 @@ public final class CryptoUtils {
 
 			return new String(cipher.doFinal(payload, GCM_IV_LENGTH, payload.length - GCM_IV_LENGTH), StandardCharsets.UTF_8);
 		} catch (final Exception e) {
-			throw new RuntimeException("Impossible de déchiffrer le mot de passe avec la clé " + keyFile(), e);
+			throw new RuntimeException(Messages.get("prefs.crypto.decryptError", keyFile()), e);
 		}
 	}
 
@@ -109,7 +111,7 @@ public final class CryptoUtils {
 			cipher.init(Cipher.DECRYPT_MODE, clef);
 			return new String(cipher.doFinal(Base64.getDecoder().decode(password)));
 		} catch (final Exception e) {
-			throw new RuntimeException("Impossible de déchiffrer le mot de passe (ancien format)", e);
+			throw new RuntimeException(Messages.get("prefs.crypto.legacyDecryptError"), e);
 		}
 	}
 
@@ -138,7 +140,7 @@ public final class CryptoUtils {
 			if (Files.isRegularFile(file)) {
 				final byte[] bytes = Files.readAllBytes(file);
 				if (bytes.length != KEY_LENGTH_BYTES) {
-					throw new IOException("Taille de clé inattendue (" + bytes.length + " octets)");
+					throw new IOException(Messages.get("prefs.crypto.keySize", bytes.length));
 				}
 				return new SecretKeySpec(bytes, "AES");
 			}
@@ -149,10 +151,10 @@ public final class CryptoUtils {
 			restrictToOwner(file.getParent());
 			Files.write(file, bytes);
 			restrictToOwner(file);
-			System.out.println("Nouvelle clé de chiffrement générée : " + file);
+			System.out.println(Messages.get("prefs.crypto.keyGenerated", file));
 			return new SecretKeySpec(bytes, "AES");
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible de lire ou créer la clé de chiffrement " + file, e);
+			throw new RuntimeException(Messages.get("prefs.crypto.keyError", file), e);
 		}
 	}
 

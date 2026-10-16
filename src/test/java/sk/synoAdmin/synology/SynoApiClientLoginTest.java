@@ -132,7 +132,7 @@ class SynoApiClientLoginTest {
 
 		assertEquals(List.of("good"), corrected);
 		assertEquals("valid", Session.load(tempDir).getCookieSession());
-		assertTrue(output().contains("mot de passe mémorisé a été refusé"));
+		assertTrue(output().contains("stored password was rejected"));
 	}
 
 	@Test
@@ -141,8 +141,8 @@ class SynoApiClientLoginTest {
 
 		new SynoApiClient(url, "admin", "typo", false, Session.load(tempDir).transientCopy(false), null).login();
 
-		assertTrue(output().contains("Identifiant ou mot de passe incorrect."));
-		assertFalse(output().contains("mémorisé"));
+		assertTrue(output().contains("Incorrect username or password."));
+		assertFalse(output().contains("stored"));
 	}
 
 	@Test
@@ -152,7 +152,7 @@ class SynoApiClientLoginTest {
 
 		final UserException e = assertThrows(UserException.class, client::login);
 
-		assertTrue(e.getMessage().contains("mot de passe incorrect"));
+		assertTrue(e.getMessage().contains("incorrect username or password"));
 		assertEquals(3, authCalls.get());
 		assertNull(Session.load(tempDir).getCookieSession());
 	}
@@ -165,7 +165,7 @@ class SynoApiClientLoginTest {
 
 		new SynoApiClient(url, "admin", "good", true, session, null).login();
 
-		assertTrue(output().contains("Code OTP incorrect."));
+		assertTrue(output().contains("Incorrect OTP code."));
 		assertEquals("dev1", Session.load(tempDir).getCookieDid());
 	}
 
@@ -201,6 +201,6 @@ class SynoApiClientLoginTest {
 
 		final UserException e = assertThrows(UserException.class, () -> new RightEngine(pref).getFullState());
 
-		assertTrue(e.getMessage().contains("compte désactivé"));
+		assertTrue(e.getMessage().contains("account disabled"));
 	}
 }

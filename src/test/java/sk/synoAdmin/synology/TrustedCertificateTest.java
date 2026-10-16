@@ -75,7 +75,7 @@ class TrustedCertificateTest {
 	void certificatAutoSigneNonAccepte_erreurExplicite() {
 		final UserException e = assertThrows(UserException.class, () -> client(null).login());
 
-		assertTrue(e.getMessage().contains("certificat"), e.getMessage());
+		assertTrue(e.getMessage().contains("certificate"), e.getMessage());
 		assertTrue(e.getMessage().contains("synoRight init"), e.getMessage());
 	}
 

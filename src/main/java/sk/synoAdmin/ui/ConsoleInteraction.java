@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
+import sk.synoAdmin.i18n.Messages;
+
 /**
  * Saisies utilisateur sur la console.
  */
@@ -73,7 +75,7 @@ public class ConsoleInteraction implements Interaction {
 			System.out.println("  " + (i + 1) + ") " + items.get(i));
 		}
 		while (true) {
-			final String rep = promptLine(label + " (numéros séparés par des virgules)");
+			final String rep = promptLine(Messages.get("ui.choices.prompt", label));
 			final Set<Integer> choices = new LinkedHashSet<>();
 			boolean valid = true;
 			for (final String part : rep.split("[,; ]+")) {
@@ -90,7 +92,7 @@ public class ConsoleInteraction implements Interaction {
 			if (valid && !choices.isEmpty()) {
 				return new ArrayList<>(choices);
 			}
-			System.out.println("Saisir des numéros entre 1 et " + items.size());
+			System.out.println(Messages.get("ui.choices.invalid", items.size()));
 		}
 	}
 
@@ -131,17 +133,31 @@ public class ConsoleInteraction implements Interaction {
 	@Override
 	public boolean promptBool(final String label) {
 		while (true) {
-			final String rep = promptLine(label + " (oui/non)");
+			final String rep = promptLine(label + " " + Messages.get("ui.bool.hint"));
 
-			if (rep.equalsIgnoreCase("oui") || rep.equalsIgnoreCase("o")
-					|| rep.equalsIgnoreCase("yes") || rep.equalsIgnoreCase("y")) {
+			if (matches(rep, "ui.bool.yes", "yes", "y", "oui", "o")) {
 				return true;
 			}
-			if (rep.equalsIgnoreCase("non") || rep.equalsIgnoreCase("n") || rep.equalsIgnoreCase("no")) {
+			if (matches(rep, "ui.bool.no", "no", "n", "non")) {
 				return false;
 			}
-			System.out.println("Répondre par oui ou non");
+			System.out.println(Messages.get("ui.bool.invalid"));
 		}
+	}
+
+	// réponses de la langue courante (clé : liste séparée par des virgules), plus celles données (anglais et français)
+	private static boolean matches(final String answer, final String key, final String... always) {
+		for (final String accepted : Messages.get(key).split(",")) {
+			if (answer.equalsIgnoreCase(accepted.trim())) {
+				return true;
+			}
+		}
+		for (final String accepted : always) {
+			if (answer.equalsIgnoreCase(accepted)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Override

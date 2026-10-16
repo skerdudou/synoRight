@@ -229,7 +229,7 @@ class RightEngineTest {
 
 		final UserException e = assertThrows(UserException.class, () -> new RightEngine(pref).checkFolder(deep.toString()));
 
-		assertTrue(e.getMessage().contains("2 premiers niveaux"));
+		assertTrue(e.getMessage().contains("first 2 folder levels"));
 	}
 
 	@Test

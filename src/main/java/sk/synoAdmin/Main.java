@@ -33,9 +33,9 @@ public class Main {
 		final int exitCode;
 
 		if (isLegacySyntax(args)) {
-			System.err.println("Syntaxe obsolète (-a <ACTION>) : l'outil utilise maintenant des sous-commandes "
-					+ "(init, status, pull, push, grant, revoke...), voir --help.");
-			System.err.println("Si ce message vient du menu contextuel, le réinstaller : synoRight menu install");
+			initLanguage(args);
+			System.err.println(Messages.get("main.legacySyntax.obsolete"));
+			System.err.println(Messages.get("main.legacySyntax.reinstall"));
 			exitCode = 2;
 		} else {
 			initLanguage(args);
@@ -82,11 +82,11 @@ public class Main {
 		if (e instanceof UserException) {
 			ui.error(e.getMessage(), LogUtil.isVerbose() ? e.getCause() : null);
 		} else if (ui.isGraphical()) {
-			ui.error("Erreur inattendue : " + e, e);
+			ui.error(Messages.get("main.error.unexpected", e), e);
 		} else {
-			ui.error("Erreur inattendue : " + e, LogUtil.isVerbose() ? e : null);
+			ui.error(Messages.get("main.error.unexpected", e), LogUtil.isVerbose() ? e : null);
 			if (!LogUtil.isVerbose()) {
-				System.err.println("(relancer avec -v pour le détail)");
+				System.err.println(Messages.get("main.error.verboseHint"));
 			}
 		}
 		return 1;

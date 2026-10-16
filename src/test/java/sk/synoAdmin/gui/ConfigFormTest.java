@@ -96,7 +96,7 @@ class ConfigFormTest {
 
 		form.groups = List.of(new Group("65536", "Kerdudou"), new Group("65537", "kerdudou"));
 
-		assertEquals(List.of("Nom court du groupe d'id 65537 invalide (« kerdudou ») : déjà utilisé par un autre groupe."),
+		assertEquals(List.of("Nom court du groupe d'id 65537 invalide (« kerdudou ») : already used by another group."),
 				form.validate().stream().filter(p -> p.contains("65537")).toList());
 	}
 

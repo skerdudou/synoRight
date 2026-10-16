@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuDefinition.MenuItem;
 
 /**
@@ -48,18 +49,18 @@ public final class ModernMenuInstaller {
 	/** Vérifie que le système et l'application permettent d'installer le menu Windows 11. */
 	public static Availability availability() {
 		if (!ProcessRunner.isWindows()) {
-			return new Availability(false, "disponible seulement sous Windows 11");
+			return new Availability(false, Messages.get("menu.install.modern.windowsOnly"));
 		}
 		if (windowsBuild() < WINDOWS_11_BUILD) {
-			return new Availability(false, "nécessite Windows 11");
+			return new Availability(false, Messages.get("menu.install.modern.needsWindows11"));
 		}
 		final Optional<Path> appDir = Launchers.appDir();
 		if (appDir.isEmpty()) {
-			return new Availability(false, "nécessite l'application installée (synoRightGui.exe), pas le jar seul");
+			return new Availability(false, Messages.get("menu.install.modern.needsApp"));
 		}
 		for (final String file : List.of(DLL, MSIX, CER)) {
 			if (!Files.isRegularFile(appDir.get().resolve(file))) {
-				return new Availability(false, "fichier " + file + " absent de " + appDir.get() + " (application construite sans le menu Windows 11)");
+				return new Availability(false, Messages.get("menu.install.modern.fileMissing", file, appDir.get()));
 			}
 		}
 		return new Availability(true, null);
@@ -81,7 +82,7 @@ public final class ModernMenuInstaller {
 	public static void install(final List<MenuItem> items, final Path configDir, final String photoFolder, final boolean hideInLegacyMenu) {
 		final Availability availability = availability();
 		if (!availability.available()) {
-			throw new UserException("Menu Windows 11 indisponible : " + availability.reason() + ".");
+			throw new UserException(Messages.get("menu.install.modern.unavailable", availability.reason()));
 		}
 		final Path appDir = Launchers.appDir().orElseThrow(ModernMenuInstaller::notInstalledApp);
 		trustCertificate(appDir.resolve(CER));
@@ -93,13 +94,13 @@ public final class ModernMenuInstaller {
 		final ProcessRunner.Result added = powershell("Add-AppxPackage -Path " + psQuote(appDir.resolve(MSIX).toString())
 				+ " -ExternalLocation " + psQuote(appDir.toString()));
 		if (!added.ok()) {
-			throw new UserException("Installation du package du menu Windows 11 en échec : " + added.output());
+			throw new UserException(Messages.get("menu.install.modern.addPackageFailed", added.output()));
 		}
 		refreshEntries(items, configDir, photoFolder, hideInLegacyMenu);
 	}
 
 	private static UserException notInstalledApp() {
-		return new UserException("Menu Windows 11 non mis à jour : lancer synoRight.exe (l'application installée) pour le mettre à jour.");
+		return new UserException(Messages.get("menu.install.modern.notInstalledApp"));
 	}
 
 	/** Réécrit les entrées du menu dans le registre, sans réinstaller le package (voir install pour hideInLegacyMenu). */
@@ -120,7 +121,7 @@ public final class ModernMenuInstaller {
 		if (ProcessRunner.run(List.of("reg", "query", REGISTRY_ROOT)).ok()) {
 			final ProcessRunner.Result deleted = ProcessRunner.run(List.of("reg", "delete", REGISTRY_ROOT, "/f"));
 			if (!deleted.ok()) {
-				throw new UserException("Suppression de la configuration du menu Windows 11 en échec : " + deleted.output());
+				throw new UserException(Messages.get("menu.install.modern.deleteConfigFailed", deleted.output()));
 			}
 		}
 	}
@@ -128,7 +129,7 @@ public final class ModernMenuInstaller {
 	private static void removePackage() {
 		final ProcessRunner.Result removed = powershell("Get-AppxPackage -Name " + PACKAGE_NAME + " | Remove-AppxPackage");
 		if (!removed.ok()) {
-			throw new UserException("Retrait du package du menu Windows 11 en échec : " + removed.output());
+			throw new UserException(Messages.get("menu.install.modern.removePackageFailed", removed.output()));
 		}
 	}
 
@@ -180,12 +181,12 @@ public final class ModernMenuInstaller {
 		if (powershell(check).output().contains("True")) {
 			return;
 		}
-		ConsoleUtil.info("Windows va demander une autorisation administrateur (une seule fois) pour approuver le certificat du menu Windows 11.");
+		ConsoleUtil.info(Messages.get("menu.install.modern.adminPrompt"));
 		final String importCommand = "Import-Certificate -FilePath " + psQuote(cer.toString()) + " -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople";
 		powershell("Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-Command',"
 				+ psQuote(importCommand));
 		if (!powershell(check).output().contains("True")) {
-			throw new UserException("Certificat du menu Windows 11 non approuvé (autorisation refusée ?) : menu non installé. Le menu classique reste disponible.");
+			throw new UserException(Messages.get("menu.install.modern.certNotTrusted"));
 		}
 	}
 
@@ -195,7 +196,7 @@ public final class ModernMenuInstaller {
 			final Certificate certificate = CertificateFactory.getInstance("X.509").generateCertificate(in);
 			return HexFormat.of().withUpperCase().formatHex(MessageDigest.getInstance("SHA-1").digest(certificate.getEncoded()));
 		} catch (final IOException | GeneralSecurityException e) {
-			throw new UserException("Certificat du menu illisible : " + cer, e);
+			throw new UserException(Messages.get("menu.install.modern.certUnreadable", cer), e);
 		}
 	}
 }

@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
 
+import sk.synoAdmin.i18n.Messages;
+
 /**
  * Exécution de commandes système (reg.exe, PowerShell) avec capture de la sortie.
  */
@@ -25,7 +27,7 @@ public final class ProcessRunner {
 			final String output = new String(process.getInputStream().readAllBytes(), Charset.forName(System.getProperty("native.encoding", "UTF-8")));
 			return new Result(process.waitFor(), output.trim());
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible d'exécuter " + command.get(0), e);
+			throw new RuntimeException(Messages.get("menu.install.runFailed", command.get(0)), e);
 		} catch (final InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new RuntimeException(e);

@@ -32,6 +32,7 @@ import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Folder;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
 
@@ -61,10 +62,10 @@ public class SynoApiClient {
 	 */
 	public SynoApiClient(final Preferences pref) {
 		this(pref.getUrl(), pref.getUser(), pref.getPassword(), true, pref.getSession(), pref.getCertFingerprint(), newPassword -> {
-			if (ConsoleUtil.promptBool("Mémoriser ce nouveau mot de passe ?")) {
+			if (ConsoleUtil.promptBool(Messages.get("synology.password.remember"))) {
 				pref.setPassword(newPassword);
 				pref.save();
-				System.out.println("Mot de passe mis à jour dans la configuration.");
+				System.out.println(Messages.get("synology.password.updated"));
 			}
 		});
 	}
@@ -135,7 +136,7 @@ public class SynoApiClient {
 			LogUtil.debug("Session expirée, nouveau login");
 		}
 
-		String pwd = initialPassword != null ? initialPassword : ConsoleUtil.promptSecret("Mot de passe de " + user + " :");
+		String pwd = initialPassword != null ? initialPassword : ConsoleUtil.promptSecret(Messages.get("synology.login.password", user));
 
 		for (int attempt = 1;; attempt++) {
 			final Map<String, String> params = new LinkedHashMap<>();
@@ -152,9 +153,9 @@ public class SynoApiClient {
 			// double authentification : code OTP, redemandé s'il est faux
 			for (int otpAttempt = 1; !isSuccess(response) && isOtpError(response) && otpAttempt <= MAX_ATTEMPTS; otpAttempt++) {
 				if (errorCode(response) == ERR_OTP_WRONG) {
-					System.out.println("Code OTP incorrect.");
+					System.out.println(Messages.get("synology.login.otpWrong"));
 				}
-				params.put("otp_code", ConsoleUtil.promptLine("Code OTP (double authentification) :"));
+				params.put("otp_code", ConsoleUtil.promptLine(Messages.get("synology.login.otpPrompt")));
 				params.put("enable_device_token", "yes");
 				response = doRequest("/webapi/entry.cgi?api=SYNO.API.Auth", params);
 			}
@@ -173,13 +174,13 @@ public class SynoApiClient {
 			final int code = errorCode(response);
 			if (code == ERR_WRONG_PASSWORD && attempt < MAX_ATTEMPTS) {
 				System.out.println(passwordFromConfig && initialPassword != null && initialPassword.equals(pwd)
-						? "Le mot de passe mémorisé a été refusé par le NAS."
-						: "Identifiant ou mot de passe incorrect.");
-				pwd = ConsoleUtil.promptSecret("Mot de passe de " + user + " :");
+						? Messages.get("synology.login.storedRefused")
+						: Messages.get("synology.login.badCredentials"));
+				pwd = ConsoleUtil.promptSecret(Messages.get("synology.login.password", user));
 				continue;
 			}
 
-			throw new UserException("Échec de la connexion à " + url + " avec le compte '" + user + "' : " + describeLoginError(code));
+			throw new UserException(Messages.get("synology.login.failed", url, user, describeLoginError(code)));
 		}
 	}
 
@@ -193,16 +194,16 @@ public class SynoApiClient {
 	 */
 	static String describeLoginError(final int code) {
 		return switch (code) {
-			case ERR_WRONG_PASSWORD -> "identifiant ou mot de passe incorrect.";
-			case 401 -> "compte désactivé.";
-			case 402 -> "permission refusée pour ce compte.";
-			case ERR_OTP_REQUIRED -> "code OTP (double authentification) non fourni.";
-			case ERR_OTP_WRONG -> "code OTP incorrect.";
-			case 406 -> "la double authentification doit d'abord être activée pour ce compte (dans DSM).";
-			case 407 -> "adresse IP bloquée après trop d'échecs (voir la protection d'accès de DSM).";
-			case 408, 409, 410 -> "mot de passe expiré ou à changer : se connecter une fois à DSM pour le changer.";
-			case -1 -> "réponse inattendue du NAS.";
-			default -> "erreur Synology " + code + ".";
+			case ERR_WRONG_PASSWORD -> Messages.get("synology.loginError.wrongPassword");
+			case 401 -> Messages.get("synology.loginError.disabled");
+			case 402 -> Messages.get("synology.loginError.denied");
+			case ERR_OTP_REQUIRED -> Messages.get("synology.loginError.otpRequired");
+			case ERR_OTP_WRONG -> Messages.get("synology.loginError.otpWrong");
+			case 406 -> Messages.get("synology.loginError.otpNotEnabled");
+			case 407 -> Messages.get("synology.loginError.ipBlocked");
+			case 408, 409, 410 -> Messages.get("synology.loginError.passwordExpired");
+			case -1 -> Messages.get("synology.loginError.unexpected");
+			default -> Messages.get("synology.loginError.other", code);
 		};
 	}
 
@@ -217,7 +218,7 @@ public class SynoApiClient {
 	// complément de message d'erreur d'API : " (code xxx)"
 	private static String errorSuffix(final JsonNode response) {
 		final int code = errorCode(response);
-		return code == -1 ? "" : " (erreur Synology " + code + ")";
+		return code == -1 ? "" : " " + Messages.get("synology.error.suffix", code);
 	}
 
 	// type de la première erreur d'une réponse de login (ex : "otp")
@@ -242,7 +243,7 @@ public class SynoApiClient {
 		final JsonNode response = doRequest("/webapi/entry.cgi", params);
 
 		if (!isSuccess(response)) {
-			throw new UserException("Impossible de récupérer la liste des groupes du NAS" + errorSuffix(response));
+			throw new UserException(Messages.get("synology.groups.listError", errorSuffix(response)));
 		}
 
 		return parseGroupList(response);
@@ -253,7 +254,7 @@ public class SynoApiClient {
 		for (final JsonNode group : response.path("data").path("groups")) {
 			final String name = group.path("name").asString();
 			if (!group.path("gid").isNumber()) {
-				throw new UserException("Réponse inattendue du NAS : identifiant (gid) absent pour le groupe '" + name + "'.");
+				throw new UserException(Messages.get("synology.groups.noGid", name));
 			}
 			groups.add(new SynoGroup(group.path("gid").asInt(), name));
 		}
@@ -297,7 +298,7 @@ public class SynoApiClient {
 		final JsonNode response = doRequest("/webapi/entry.cgi/SYNO.FotoTeam.Browse.Folder", params);
 
 		if (!isSuccess(response)) {
-			throw new UserException("Impossible de lire les droits Synology Photos" + errorSuffix(response) + ". Le compte a-t-il accès à l'espace partagé de Synology Photos ?");
+			throw new UserException(Messages.get("synology.rights.readError", errorSuffix(response)));
 		}
 
 		return parseFolderList(response);
@@ -325,7 +326,7 @@ public class SynoApiClient {
 		final JsonNode response = doRequest("/webapi/entry.cgi/SYNO.FotoTeam.Sharing.FolderBatchPermission", params);
 
 		if (!isSuccess(response)) {
-			throw new UserException("Impossible de modifier les droits dans Synology Photos" + errorSuffix(response));
+			throw new UserException(Messages.get("synology.rights.writeError", errorSuffix(response)));
 		}
 	}
 
@@ -370,7 +371,7 @@ public class SynoApiClient {
 			// URI.create accepte des URL que HttpRequest refuse ensuite (ex : hôte accentué)
 			builder = HttpRequest.newBuilder(URI.create(url + path));
 		} catch (final IllegalArgumentException e) {
-			throw new UserException("URL du NAS invalide : '" + url + "' (attendu : https://nas.example.com:5001)");
+			throw new UserException(Messages.get("synology.url.invalid", url));
 		}
 
 		builder.timeout(Duration.ofSeconds(60))
@@ -389,9 +390,9 @@ public class SynoApiClient {
 			return MAPPER.readTree(response.body());
 		} catch (final IOException | JacksonException e) {
 			// JacksonException (non contrôlée depuis Jackson 3) : réponse qui n'est pas du JSON
-			throw new UserException("Erreur de communication avec le NAS (" + url + ") : " + describeIoError(e), e);
+			throw new UserException(Messages.get("synology.comm.error", url, describeIoError(e)), e);
 		} catch (final IllegalArgumentException e) {
-			throw new UserException("Erreur de communication avec le NAS (" + url + ") : " + describeIoError(e), e);
+			throw new UserException(Messages.get("synology.comm.error", url, describeIoError(e)), e);
 		} catch (final InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new RuntimeException(e);
@@ -405,20 +406,19 @@ public class SynoApiClient {
 		Throwable cause = e;
 		while (cause != null) {
 			if (cause instanceof UnresolvedAddressException) {
-				return "nom d'hôte introuvable, vérifier l'URL.";
+				return Messages.get("synology.io.unknownHost");
 			}
 			if (cause instanceof SSLException) {
-				return "connexion HTTPS refusée (certificat non reconnu ?) : " + cause.getMessage()
-						+ ". Certificat auto-signé : relancer 'synoRight init' pour lui faire confiance.";
+				return Messages.get("synology.io.ssl", cause.getMessage());
 			}
 			if (cause instanceof HttpTimeoutException) {
-				return "le NAS ne répond pas (délai dépassé).";
+				return Messages.get("synology.io.timeout");
 			}
 			if (cause instanceof ConnectException) {
-				return "NAS injoignable, vérifier l'URL, le port et le réseau.";
+				return Messages.get("synology.io.unreachable");
 			}
 			if (cause instanceof JacksonException) {
-				return "réponse inattendue (pas du JSON) : l'URL pointe-t-elle bien vers DSM (ex : https://nas:5001) ?";
+				return Messages.get("synology.io.notJson");
 			}
 			cause = cause.getCause();
 		}

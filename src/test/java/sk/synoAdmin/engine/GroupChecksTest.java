@@ -18,7 +18,7 @@ class GroupChecksTest {
 				List.of(new SynoGroup(3, "Famille"), new SynoGroup(7, "Famille Kerdudou")),
 				List.of(new Group("3", "famille"), new Group("5", "amis"), new Group("7", "Kerdudou")));
 
-		assertEquals(List.of("Attention : le groupe 'amis' (id 5) n'existe plus sur le NAS."), warnings);
+		assertEquals(List.of("Warning: the group 'amis' (id 5) no longer exists on the NAS."), warnings);
 	}
 
 	@Test
@@ -27,10 +27,10 @@ class GroupChecksTest {
 
 		assertNull(GroupChecks.invalidShortName("Famille Kerdudou", groups, "7"));
 		assertNull(GroupChecks.invalidShortName("Kerdudou", groups, "3"));
-		assertEquals("nom vide", GroupChecks.invalidShortName("  ", groups, "7"));
-		assertEquals("caractère interdit « : »", GroupChecks.invalidShortName("a:b", groups, "7"));
-		assertEquals("caractère interdit « ; »", GroupChecks.invalidShortName("a;b", groups, "7"));
-		assertEquals("caractère interdit « / »", GroupChecks.invalidShortName("a/b", groups, "7"));
-		assertEquals("déjà utilisé par un autre groupe", GroupChecks.invalidShortName("kerdudou", groups, "7"));
+		assertEquals("empty name", GroupChecks.invalidShortName("  ", groups, "7"));
+		assertEquals("forbidden character ':'", GroupChecks.invalidShortName("a:b", groups, "7"));
+		assertEquals("forbidden character ';'", GroupChecks.invalidShortName("a;b", groups, "7"));
+		assertEquals("forbidden character '/'", GroupChecks.invalidShortName("a/b", groups, "7"));
+		assertEquals("already used by another group", GroupChecks.invalidShortName("kerdudou", groups, "7"));
 	}
 }

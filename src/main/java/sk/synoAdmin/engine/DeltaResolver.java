@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import sk.synoAdmin.i18n.Messages;
+
 public final class DeltaResolver {
 
 	private DeltaResolver() {
@@ -26,11 +28,11 @@ public final class DeltaResolver {
 		}
 
 		public void printAdd() {
-			print(toAdd, "Ajout des droits pour les répertoires :");
+			print(toAdd, Messages.get("engine.delta.add"));
 		}
 
 		public void printRemove() {
-			print(toRemove, "Suppression des droits pour les répertoires :");
+			print(toRemove, Messages.get("engine.delta.remove"));
 		}
 
 		private void print(final List<Folder> list, final String message) {

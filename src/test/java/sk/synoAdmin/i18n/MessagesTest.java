@@ -53,6 +53,14 @@ class MessagesTest {
 	}
 
 	@Test
+	void substitution_uneSeulePasseEtSansArguments() {
+		Messages.setLanguage(Language.EN);
+		assertEquals("A {1} B 2", Messages.get("test.params", "{1}", 2));
+		assertEquals("A {0} B {1}", Messages.get("test.params"));
+		assertEquals("A {0} B {1}", Messages.get("test.params", (Object[]) null));
+	}
+
+	@Test
 	void apostropheConservee() {
 		Messages.setLanguage(Language.FR);
 		assertEquals("l'album 'X'", Messages.get("test.apostrophe", "X"));

@@ -7,6 +7,7 @@ import javax.net.ssl.SSLHandshakeException;
 
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Session;
 
 /**
@@ -106,12 +107,8 @@ public final class ConnectionCheck {
 			return null;
 		}
 
-		final String text = "Le certificat HTTPS du NAS n'est pas reconnu (certificat auto-signé ?) :\n"
-				+ "  Sujet          : " + certificate.getSubjectX500Principal().getName() + "\n"
-				+ "  Émetteur       : " + certificate.getIssuerX500Principal().getName() + "\n"
-				+ "  Valide jusqu'au: " + certificate.getNotAfter().toInstant().atZone(ZoneId.systemDefault()).toLocalDate() + "\n"
-				+ "  SHA-256        : " + fingerprint + "\n"
-				+ "Vérifier cette empreinte (navigateur : cadenas > certificat) avant de l'accepter.";
-		return ConsoleUtil.promptBool(text + "\nFaire confiance à ce certificat ?") ? fingerprint : null;
+		final String text = Messages.get("synology.cert.text", certificate.getSubjectX500Principal().getName(), certificate.getIssuerX500Principal().getName(),
+				certificate.getNotAfter().toInstant().atZone(ZoneId.systemDefault()).toLocalDate(), fingerprint);
+		return ConsoleUtil.promptBool(text + "\n" + Messages.get("synology.cert.trustQuestion")) ? fingerprint : null;
 	}
 }

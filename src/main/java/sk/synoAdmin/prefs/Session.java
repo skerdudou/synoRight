@@ -5,6 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
 
+import sk.synoAdmin.i18n.Messages;
+
 /**
  * Session Synology Photos (cookie de session, token, device id OTP), mémorisée chiffrée
  * dans un fichier à part de la configuration : la configuration reste éditable à la
@@ -40,7 +42,7 @@ public final class Session {
 		try {
 			prop = PropertiesFiles.load(session.file);
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible de lire la session " + session.file, e);
+			throw new RuntimeException(Messages.get("prefs.session.readError", session.file), e);
 		}
 		session.cookieSession = readProtected(prop, KEY_SESSION);
 		session.synoToken = readProtected(prop, KEY_TOKEN);
@@ -148,7 +150,7 @@ public final class Session {
 		try {
 			Files.deleteIfExists(file);
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible de supprimer la session " + file, e);
+			throw new RuntimeException(Messages.get("prefs.session.deleteError", file), e);
 		}
 	}
 
@@ -165,7 +167,7 @@ public final class Session {
 		try {
 			PropertiesFiles.store(file, prop, "Session Synology Photos (chiffrée, propre à ce poste)");
 		} catch (final IOException e) {
-			throw new RuntimeException("Impossible d'écrire la session " + file, e);
+			throw new RuntimeException(Messages.get("prefs.session.writeError", file), e);
 		}
 	}
 

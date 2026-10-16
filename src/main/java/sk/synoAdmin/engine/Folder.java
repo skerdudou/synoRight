@@ -4,6 +4,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+import sk.synoAdmin.i18n.Messages;
+
 public class Folder {
 	public Folder(final File folder, final Folder parent) {
 		this.folder = folder;
@@ -30,7 +32,7 @@ public class Folder {
 
 	public void setId(final Integer id) {
 		if (this.id != null && !this.id.equals(id)) {
-			throw new RuntimeException("Les ID sont non concordants entre les appels");
+			throw new RuntimeException(Messages.get("engine.folder.idMismatch"));
 		}
 		this.id = id;
 	}

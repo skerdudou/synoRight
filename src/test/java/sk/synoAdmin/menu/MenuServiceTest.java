@@ -25,7 +25,7 @@ class MenuServiceTest {
 				}));
 
 		assertEquals(List.of("classique", "modern"), calls);
-		assertTrue(e.getMessage().contains("Menu classique installé"));
+		assertTrue(e.getMessage().contains("Classic menu installed"));
 		assertTrue(e.getMessage().contains("autorisation refusée"));
 	}
 }

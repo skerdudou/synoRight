@@ -3,6 +3,7 @@ package sk.synoAdmin.menu;
 import java.util.List;
 
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuDefinition.MenuItem;
 import sk.synoAdmin.prefs.Preferences;
 
@@ -55,12 +56,12 @@ public final class MenuService {
 			}
 			ClassicMenuInstaller.install(classicItems, pref.getNasFolder(), pref.getConfigDir());
 		}
-		return "Menu contextuel installé pour l'utilisateur courant ("
-				+ (modern && classic ? "Windows 11 : " + modernItems.size() + " entrée(s), classique : " + classicItems.size() + " entrée(s)"
-						: modern ? "Windows 11, " + modernItems.size() + " entrée(s)" : "classique, " + classicItems.size() + " entrée(s)")
-				+ ")."
+		final String detail = modern && classic ? Messages.get("menu.install.detail.both", modernItems.size(), classicItems.size())
+				: modern ? Messages.get("menu.install.detail.modern", modernItems.size())
+						: Messages.get("menu.install.detail.classic", classicItems.size());
+		return Messages.get("menu.install.done", detail)
 				// l'Explorateur garde parfois en cache l'état précédent du package
-				+ (modern ? "\nSi le menu Windows 11 n'apparaît pas ou n'est pas à jour, redémarrer l'Explorateur (ou fermer puis rouvrir la session)." : "");
+				+ (modern ? "\n" + Messages.get("menu.install.restartExplorer") : "");
 	}
 
 	/** Entrées du menu Windows 11 (modern) ou du menu classique, selon la configuration. */
@@ -74,7 +75,7 @@ public final class MenuService {
 		try {
 			modern.run();
 		} catch (final UserException e) {
-			throw new UserException("Menu classique installé, mais menu Windows 11 non installé : " + e.getMessage(), e);
+			throw new UserException(Messages.get("menu.install.classicOnly", e.getMessage()), e);
 		}
 	}
 

@@ -18,6 +18,7 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 import sk.synoAdmin.UserException;
+import sk.synoAdmin.i18n.Messages;
 
 /**
  * Confiance dans un certificat précis du NAS (typiquement auto-signé), identifié par
@@ -54,7 +55,7 @@ public final class TrustedCertificate {
 			context.init(null, new TrustManager[] { new PinningTrustManager(pinnedFingerprint, defaultTrustManager()) }, null);
 			return context;
 		} catch (final GeneralSecurityException e) {
-			throw new IllegalStateException("Impossible d'initialiser TLS", e);
+			throw new IllegalStateException(Messages.get("synology.tls.initError"), e);
 		}
 	}
 
@@ -74,11 +75,11 @@ public final class TrustedCertificate {
 				socket.startHandshake();
 			}
 			if (capture.serverCertificate == null) {
-				throw new UserException("Le NAS (" + url + ") n'a présenté aucun certificat.");
+				throw new UserException(Messages.get("synology.cert.none", url));
 			}
 			return capture.serverCertificate;
 		} catch (final IOException | GeneralSecurityException e) {
-			throw new UserException("Impossible de récupérer le certificat de " + url + " : " + e.getMessage(), e);
+			throw new UserException(Messages.get("synology.cert.fetchError", url, e.getMessage()), e);
 		}
 	}
 
@@ -90,7 +91,7 @@ public final class TrustedCertificate {
 				return extended;
 			}
 		}
-		throw new IllegalStateException("Aucun gestionnaire de confiance X509 disponible");
+		throw new IllegalStateException(Messages.get("synology.tls.noTrustManager"));
 	}
 
 	/**

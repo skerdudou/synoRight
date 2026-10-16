@@ -35,7 +35,10 @@ public final class Messages {
 		return language;
 	}
 
-	/** Bundle de la langue courante (pour picocli) ; les clés absentes ne sont pas complétées par l'anglais. */
+	/**
+	 * Bundle de la langue courante (pour picocli). Sans repli sur la langue du système, mais le fichier
+	 * racine (anglais) reste son parent : une clé absente de la langue est retrouvée en anglais.
+	 */
 	public static ResourceBundle bundle() {
 		return bundle;
 	}
@@ -52,10 +55,45 @@ public final class Messages {
 		if (text == null) {
 			return "!" + key + "!";
 		}
-		for (int i = 0; i < args.length; i++) {
-			text = text.replace("{" + i + "}", String.valueOf(args[i]));
+		return substitute(text, args);
+	}
+
+	// une seule passe : un argument contenant "{1}" n'est pas re-substitué
+	private static String substitute(final String text, final Object[] args) {
+		if (args == null || args.length == 0) {
+			return text;
 		}
-		return text;
+		final StringBuilder result = new StringBuilder(text.length() + 16);
+		int i = 0;
+		while (i < text.length()) {
+			final char c = text.charAt(i);
+			if (c == '{') {
+				final int end = text.indexOf('}', i);
+				if (end > i + 1 && isNumber(text, i + 1, end)) {
+					final int index = Integer.parseInt(text.substring(i + 1, end));
+					if (index < args.length) {
+						result.append(args[index]);
+						i = end + 1;
+						continue;
+					}
+				}
+			}
+			result.append(c);
+			i++;
+		}
+		return result.toString();
+	}
+
+	private static boolean isNumber(final String text, final int from, final int to) {
+		if (to - from > 9) {
+			return false;
+		}
+		for (int i = from; i < to; i++) {
+			if (!Character.isDigit(text.charAt(i))) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private static String lookup(final ResourceBundle source, final String key) {

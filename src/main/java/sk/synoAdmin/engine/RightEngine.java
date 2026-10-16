@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutionException;
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.DeltaResolver.GrpDelta;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.synology.SynoApiClient;
 import sk.synoAdmin.synology.SynoFolderPermission;
@@ -69,8 +70,7 @@ public class RightEngine {
 
 	private void checkNasFolder() {
 		if (!new File(pref.getNasFolder()).isDirectory()) {
-			throw new UserException("Répertoire des photos inaccessible : '" + pref.getNasFolder()
-					+ "'. Le NAS est-il joignable et le partage monté ?");
+			throw new UserException(Messages.get("engine.nasFolder.inaccessible", pref.getNasFolder()));
 		}
 	}
 
@@ -85,7 +85,7 @@ public class RightEngine {
 
 		final File[] subFolders = folder.listFiles(File::isDirectory);
 		if (subFolders == null) {
-			throw new UserException("Impossible de lister le répertoire '" + folder.getPath() + "'");
+			throw new UserException(Messages.get("engine.folder.listError", folder.getPath()));
 		}
 
 		for (final File file : subFolders) {
@@ -195,7 +195,7 @@ public class RightEngine {
 			Files.setAttribute(fileToAdd.toPath(), "dos:hidden", Boolean.TRUE, LinkOption.NOFOLLOW_LINKS);
 			return created;
 		} catch (final IOException e) {
-			System.err.println("Impossible de créer le fichier d'affectation des droits " + fileToAdd.getPath());
+			System.err.println(Messages.get("engine.file.createError", fileToAdd.getPath()));
 			return false;
 		}
 	}
@@ -207,7 +207,7 @@ public class RightEngine {
 			return false;
 		}
 		if (!fileToDelete.delete()) {
-			System.err.println("Impossible de supprimer le fichier d'affectation des droits " + fileToDelete.getPath());
+			System.err.println(Messages.get("engine.file.deleteError", fileToDelete.getPath()));
 			return false;
 		}
 		return true;
@@ -242,8 +242,9 @@ public class RightEngine {
 			doCreateRightFile(grp, parentFolder);
 		}
 
-		return "Droit '" + grp.getName() + "' ajouté sur " + folderToUpdate.getName()
-				+ (parentFolder == null ? "" : " (et sur le dossier parent " + parentFolder.getName() + ")") + ".";
+		return parentFolder == null
+				? Messages.get("engine.right.added", grp.getName(), folderToUpdate.getName())
+				: Messages.get("engine.right.addedWithParent", grp.getName(), folderToUpdate.getName(), parentFolder.getName());
 	}
 
 	// retire le droit côté Photos et fichiers, renvoie le message de confirmation
@@ -254,7 +255,7 @@ public class RightEngine {
 		// suppression sur FS
 		doRemoveRightFile(grp, folderToUpdate);
 
-		return "Droit '" + grp.getName() + "' retiré de " + folderToUpdate.getName() + ".";
+		return Messages.get("engine.right.removed", grp.getName(), folderToUpdate.getName());
 	}
 
 	public FolderRights folderRights(final String folder) {
@@ -301,17 +302,16 @@ public class RightEngine {
 		final Path nasPath = Paths.get(pref.getNasFolder()).toAbsolutePath().normalize();
 
 		if (!Files.isDirectory(folderPath)) {
-			throw new UserException("Le répertoire '" + folder + "' n'existe pas.");
+			throw new UserException(Messages.get("engine.folder.notFound", folder));
 		}
 
 		if (folderPath.equals(nasPath) || !folderPath.startsWith(nasPath)) {
-			throw new UserException("Répertoire non pris en charge, il doit être contenu dans '" + pref.getNasFolder() + "'");
+			throw new UserException(Messages.get("engine.folder.unsupported", pref.getNasFolder()));
 		}
 
 		final Path relativePath = nasPath.relativize(folderPath);
 		if (relativePath.getNameCount() > MAX_DEPTH) {
-			throw new UserException("Synology Photos ne gère les droits que sur les " + MAX_DEPTH
-					+ " premiers niveaux de dossiers sous '" + pref.getNasFolder() + "'.");
+			throw new UserException(Messages.get("engine.folder.depth", MAX_DEPTH, pref.getNasFolder()));
 		}
 		return relativePath;
 	}
@@ -339,7 +339,7 @@ public class RightEngine {
 				}
 			}
 			if (!found) {
-				throw new UserException("Le dossier '" + newFolder.getName() + "' n'est pas (encore) indexé par Synology Photos.");
+				throw new UserException(Messages.get("engine.folder.notIndexed", newFolder.getName()));
 			}
 			parent = newFolder;
 		}

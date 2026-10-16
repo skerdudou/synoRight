@@ -4,6 +4,7 @@ import java.io.Console;
 import java.io.InputStream;
 import java.util.List;
 
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.ui.ConsoleInteraction;
 import sk.synoAdmin.ui.Interaction;
 
@@ -74,7 +75,7 @@ public final class ConsoleUtil {
 		if (console == null || !console.isTerminal()) {
 			return;
 		}
-		System.out.println("Appuyer sur Entrée pour fermer...");
+		System.out.println(Messages.get("ui.pause"));
 		console.readLine();
 	}
 }

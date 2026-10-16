@@ -3,6 +3,7 @@ package sk.synoAdmin.engine;
 import java.util.ArrayList;
 import java.util.List;
 
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.synology.SynoGroup;
 
 /**
@@ -28,7 +29,7 @@ public final class GroupChecks {
 		final List<String> warnings = new ArrayList<>();
 		for (final Group grp : groups) {
 			if (nasGroups.stream().noneMatch(g -> String.valueOf(g.gid()).equals(grp.getId()))) {
-				warnings.add("Attention : le groupe '" + grp.getName() + "' (id " + grp.getId() + ") n'existe plus sur le NAS.");
+				warnings.add(Messages.get("engine.group.missing", grp.getName(), grp.getId()));
 			}
 		}
 		return warnings;
@@ -44,15 +45,15 @@ public final class GroupChecks {
 	public static String invalidShortName(final String name, final List<Group> groups, final String id) {
 		final String trimmed = name == null ? "" : name.trim();
 		if (trimmed.isEmpty()) {
-			return "nom vide";
+			return Messages.get("engine.shortName.empty");
 		}
 		for (final char c : trimmed.toCharArray()) {
 			if (FORBIDDEN.indexOf(c) >= 0 || c < ' ') {
-				return "caractère interdit « " + c + " »";
+				return Messages.get("engine.shortName.forbidden", c);
 			}
 		}
 		if (groups.stream().anyMatch(g -> !g.getId().equals(id) && g.getName().equalsIgnoreCase(trimmed))) {
-			return "déjà utilisé par un autre groupe";
+			return Messages.get("engine.shortName.duplicate");
 		}
 		return null;
 	}

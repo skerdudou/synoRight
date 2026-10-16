@@ -100,17 +100,17 @@ class SynoApiClientTest {
 
 	@Test
 	void describeLoginError_codesConnus() {
-		assertTrue(SynoApiClient.describeLoginError(400).contains("mot de passe incorrect"));
+		assertTrue(SynoApiClient.describeLoginError(400).contains("incorrect username or password"));
 		assertTrue(SynoApiClient.describeLoginError(404).contains("OTP"));
-		assertTrue(SynoApiClient.describeLoginError(407).contains("bloquée"));
+		assertTrue(SynoApiClient.describeLoginError(407).contains("blocked"));
 		assertTrue(SynoApiClient.describeLoginError(999).contains("999"));
 	}
 
 	@Test
 	void describeIoError_causesReseau() {
-		assertTrue(SynoApiClient.describeIoError(new java.net.ConnectException()).contains("injoignable"));
-		assertTrue(SynoApiClient.describeIoError(new java.io.IOException(new java.nio.channels.UnresolvedAddressException())).contains("hôte introuvable"));
-		assertTrue(SynoApiClient.describeIoError(new javax.net.ssl.SSLHandshakeException("PKIX")).contains("certificat"));
+		assertTrue(SynoApiClient.describeIoError(new java.net.ConnectException()).contains("unreachable"));
+		assertTrue(SynoApiClient.describeIoError(new java.io.IOException(new java.nio.channels.UnresolvedAddressException())).contains("host name not found"));
+		assertTrue(SynoApiClient.describeIoError(new javax.net.ssl.SSLHandshakeException("PKIX")).contains("certificate"));
 		assertTrue(SynoApiClient.describeIoError(assertThrows(JacksonException.class, () -> MAPPER.readTree("<html>"))).contains("DSM"));
 	}
 }

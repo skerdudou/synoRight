@@ -1,7 +1,6 @@
 package sk.synoAdmin.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Paths;
@@ -72,20 +71,6 @@ class CliTest {
 		final ParseResult result = parse(new SynoRightCommand(), "groups", "add");
 
 		assertEquals("add", result.subcommand().subcommand().commandSpec().name());
-	}
-
-	@Test
-	void isCertificateError_causeSslDansLaChaine() {
-		assertTrue(InitCommand.isCertificateError(new sk.synoAdmin.UserException("x",
-				new java.io.IOException(new javax.net.ssl.SSLHandshakeException("PKIX")))));
-		assertFalse(InitCommand.isCertificateError(new sk.synoAdmin.UserException("x", new java.net.ConnectException())));
-	}
-
-	@Test
-	void normalizeUrl_ajouteHttpsEtRetireLeSlash() {
-		assertEquals("https://nas:5001", InitCommand.normalizeUrl("nas:5001/"));
-		assertEquals("http://nas:5000", InitCommand.normalizeUrl(" http://nas:5000 "));
-		assertEquals("HTTPS://nas", InitCommand.normalizeUrl("HTTPS://nas"));
 	}
 
 	@Test

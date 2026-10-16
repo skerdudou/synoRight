@@ -4,12 +4,8 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.cert.X509Certificate;
-import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
-
-import javax.net.ssl.SSLHandshakeException;
 
 import picocli.CommandLine.Command;
 import sk.synoAdmin.ConsoleUtil;
@@ -18,9 +14,9 @@ import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
+import sk.synoAdmin.synology.ConnectionCheck;
 import sk.synoAdmin.synology.SynoApiClient;
 import sk.synoAdmin.synology.SynoGroup;
-import sk.synoAdmin.synology.TrustedCertificate;
 
 /**
  * Assistant de configuration : connexion au NAS (validée avant d'aller plus loin),
@@ -51,10 +47,10 @@ final class InitCommand extends AbstractCommand {
 		String fingerprint = existing == null ? null : existing.getCertFingerprint();
 		SynoApiClient client;
 		while (true) {
-			url = normalizeUrl(ConsoleUtil.promptLine("URL de DSM (ex : https://nas.example.com:5001) :", url));
+			url = ConnectionCheck.normalizeUrl(ConsoleUtil.promptLine("URL de DSM (ex : https://nas.example.com:5001) :", url));
 			user = ConsoleUtil.promptLine("Compte (administrateur de Synology Photos) :", user);
 
-			final boolean sameAccount = existing != null && url.equals(normalizeUrl(existing.getUrl())) && user.equals(existing.getUser());
+			final boolean sameAccount = existing != null && url.equals(ConnectionCheck.normalizeUrl(existing.getUrl())) && user.equals(existing.getUser());
 			final boolean keepPassword;
 			if (sameAccount && existing.getPassword() != null) {
 				password[0] = ConsoleUtil.promptSecretOrKeep("Mot de passe (Entrée pour conserver l'actuel) :");
@@ -67,31 +63,17 @@ final class InitCommand extends AbstractCommand {
 				keepPassword = false;
 			}
 
-			// session de travail en mémoire : la session mémorisée n'est remplacée qu'à l'enregistrement ;
-			// même compte : le device id évite de redemander l'OTP
-			workSession = session.transientCopy(sameAccount);
-
-			boolean connected = false;
-			while (true) {
-				// mot de passe corrigé pendant le login : c'est lui qui sera mémorisé
-				client = new SynoApiClient(url, user, password[0], keepPassword, workSession, fingerprint, newPassword -> password[0] = newPassword);
-				try {
-					client.login();
-					connected = true;
-				} catch (final UserException e) {
-					// certificat auto-signé : proposer de lui faire confiance, puis réessayer avec les mêmes identifiants
-					final String trusted = isCertificateError(e) ? promptTrustCertificate(url, fingerprint) : null;
-					if (trusted != null) {
-						fingerprint = trusted;
-						continue;
-					}
-					System.out.println(e.getMessage());
-				}
-				break;
-			}
-			if (connected) {
+			try {
+				// mot de passe éventuellement corrigé pendant le login : c'est lui qui sera mémorisé
+				final ConnectionCheck.Result result = ConnectionCheck.connect(url, user, password[0], keepPassword, session, sameAccount, fingerprint);
+				client = result.client();
+				workSession = result.workSession();
+				password[0] = result.password();
+				fingerprint = result.fingerprint();
 				System.out.println("Connexion OK.");
 				break;
+			} catch (final UserException e) {
+				System.out.println(e.getMessage());
 			}
 			if (!ConsoleUtil.promptBool("Réessayer ?")) {
 				throw new UserException("Configuration abandonnée, rien n'a été enregistré.");
@@ -128,43 +110,6 @@ final class InitCommand extends AbstractCommand {
 		System.out.println("Terminé. Pour commencer : 'synoRight status' affiche l'état des droits, 'synoRight --help' liste les commandes.");
 	}
 
-	static boolean isCertificateError(final Throwable e) {
-		for (Throwable cause = e; cause != null; cause = cause.getCause()) {
-			if (cause instanceof SSLHandshakeException) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Affiche le certificat présenté par le NAS et demande si on lui fait confiance.
-	 *
-	 * @return son empreinte si l'utilisateur l'accepte, null sinon
-	 */
-	private static String promptTrustCertificate(final String url, final String currentFingerprint) {
-		final X509Certificate certificate;
-		try {
-			certificate = TrustedCertificate.fetchServerCertificate(url);
-		} catch (final UserException e) {
-			System.out.println(e.getMessage());
-			return null;
-		}
-		final String fingerprint = TrustedCertificate.fingerprint(certificate);
-		if (fingerprint.equalsIgnoreCase(currentFingerprint)) {
-			// déjà accepté : l'échec a une autre cause
-			return null;
-		}
-
-		System.out.println("Le certificat HTTPS du NAS n'est pas reconnu (certificat auto-signé ?) :");
-		System.out.println("  Sujet          : " + certificate.getSubjectX500Principal().getName());
-		System.out.println("  Émetteur       : " + certificate.getIssuerX500Principal().getName());
-		System.out.println("  Valide jusqu'au: " + certificate.getNotAfter().toInstant().atZone(ZoneId.systemDefault()).toLocalDate());
-		System.out.println("  SHA-256        : " + fingerprint);
-		System.out.println("Vérifier cette empreinte (navigateur : cadenas > certificat) avant de l'accepter.");
-		return ConsoleUtil.promptBool("Faire confiance à ce certificat ?") ? fingerprint : null;
-	}
-
 	private static Preferences loadExisting(final Path dir) {
 		if (!Preferences.exists(dir)) {
 			return null;
@@ -175,20 +120,6 @@ final class InitCommand extends AbstractCommand {
 			System.out.println("Configuration existante illisible (" + e.getMessage() + ") : elle sera remplacée.");
 			return null;
 		}
-	}
-
-	/**
-	 * Complète l'URL saisie : https:// par défaut, sans / final.
-	 */
-	static String normalizeUrl(final String input) {
-		String url = input.trim();
-		if (!url.matches("(?i)^https?://.*")) {
-			url = "https://" + url;
-		}
-		while (url.endsWith("/")) {
-			url = url.substring(0, url.length() - 1);
-		}
-		return url;
 	}
 
 	private static String promptFolder(final String defaultValue) {

@@ -6,7 +6,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import picocli.CommandLine.ArgGroup;
@@ -15,6 +14,7 @@ import picocli.CommandLine.Option;
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.engine.GroupChecks;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.menu.MenuTarget;
@@ -42,22 +42,9 @@ final class ConfigCommands {
 	 * @return true si tout correspond
 	 */
 	static boolean checkGroups(final List<SynoGroup> nasGroups, final List<Group> groups) {
-		boolean ok = true;
-		for (final Group grp : groups) {
-			final Optional<SynoGroup> nasGroup = nasGroups.stream()
-					.filter(g -> String.valueOf(g.gid()).equals(grp.getId()))
-					.findAny();
-
-			if (nasGroup.isEmpty()) {
-				System.out.println("Attention : le groupe '" + grp.getName() + "' (id " + grp.getId() + ") n'existe plus sur le NAS.");
-				ok = false;
-			} else if (!nasGroup.get().name().equalsIgnoreCase(grp.getName())) {
-				System.out.println("Attention : le groupe d'id " + grp.getId() + " s'appelle '" + nasGroup.get().name()
-						+ "' sur le NAS, mais '" + grp.getName() + "' dans la configuration.");
-				ok = false;
-			}
-		}
-		return ok;
+		final List<String> warnings = GroupChecks.warnings(nasGroups, groups);
+		warnings.forEach(System.out::println);
+		return warnings.isEmpty();
 	}
 
 	static String describe(final MenuService.Status status) {

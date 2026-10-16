@@ -31,7 +31,7 @@ namespace {
 
 constexpr wchar_t MENU_KEY[] = L"Software\\synoRight\\Menu";
 constexpr wchar_t ENTRIES_KEY[] = L"Software\\synoRight\\Menu\\Entries";
-constexpr wchar_t ROOT_TITLE[] = L"Droits Synology Photos";
+constexpr wchar_t DEFAULT_ROOT_TITLE[] = L"Synology Photos";
 
 struct Entry {
 	std::wstring title;
@@ -315,7 +315,16 @@ class __declspec(uuid("7B3F9E62-5C1A-4D8B-9E2F-3A6C1D4B8F10")) RootCommand final
 	: public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite, IObjectWithSelection> {
 public:
 	IFACEMETHODIMP GetTitle(IShellItemArray*, LPWSTR* const name) override {
-		return SHStrDupW(ROOT_TITLE, name);
+		// titre écrit par synoRight dans la langue choisie ; absent (ancienne installation) : repli
+		try {
+			std::wstring title;
+			if (ReadString(HKEY_CURRENT_USER, MENU_KEY, L"RootTitle", title)) {
+				return SHStrDupW(title.c_str(), name);
+			}
+		} catch (...) {
+			// repli ci-dessous
+		}
+		return SHStrDupW(DEFAULT_ROOT_TITLE, name);
 	}
 	IFACEMETHODIMP GetIcon(IShellItemArray*, LPWSTR* const icon) override {
 		*icon = nullptr;

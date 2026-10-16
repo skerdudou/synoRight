@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.i18n.Messages;
 
 /**
  * Entrées du menu contextuel, communes au menu classique et au menu Windows 11.
@@ -12,7 +13,11 @@ import sk.synoAdmin.engine.Group;
 public final class MenuDefinition {
 
 	public static final String PATH = "%V";
-	public static final String ROOT_TITLE = "Droits Synology Photos";
+
+	/** Titre du sous-menu racine, dans la langue courante. */
+	public static String rootTitle() {
+		return Messages.get("menu.root");
+	}
 
 	/**
 	 * @param key nom de clé de registre (ordre d'affichage)
@@ -61,8 +66,8 @@ public final class MenuDefinition {
 			case CONFIG -> List.<String[]>of(new String[] { "config", entry.label(), "config" });
 			case GROUPS -> groups.stream()
 					.<String[]>mapMulti((g, out) -> {
-						out.accept(new String[] { "add" + g.getId(), "Ajouter " + g.getName(), "grant", g.getName(), PATH });
-						out.accept(new String[] { "del" + g.getId(), "Retirer " + g.getName(), "revoke", g.getName(), PATH });
+						out.accept(new String[] { "add" + g.getId(), Messages.get("menu.group.add", g.getName()), "grant", g.getName(), PATH });
+						out.accept(new String[] { "del" + g.getId(), Messages.get("menu.group.remove", g.getName()), "revoke", g.getName(), PATH });
 					})
 					.toList();
 		};

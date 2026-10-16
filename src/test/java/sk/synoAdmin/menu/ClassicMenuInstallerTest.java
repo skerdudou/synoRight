@@ -56,23 +56,28 @@ class ClassicMenuInstallerTest {
 		final String content = buildContent(List.of(MenuEntry.RIGHTS));
 
 		assertTrue(content.contains("\\shell\\01rights]"));
-		assertTrue(content.contains("\"MUIVerb\"=\"Droits du dossier…\""));
+		assertTrue(content.contains("\"MUIVerb\"=\"Folder permissions…\""));
 		// "C:\Java\bin\javaw.exe" -jar "D:\apps\synoRight.jar" gui -c "D:\apps" rights "%V" (échappé .reg)
 		assertTrue(content.contains("@=\"C:\\\\Java\\\\bin\\\\javaw.exe -jar D:\\\\apps\\\\synoRight.jar gui -c D:\\\\apps rights \\\"%V\\\"\""));
+	}
+
+	@Test
+	void titreRacine_enAnglais() {
+		assertTrue(buildContent(List.of(MenuEntry.RIGHTS)).contains("\"MUIVerb\"=\"Synology Photos permissions\""));
 	}
 
 	@Test
 	void separateur_avantLaPremiereEntreeDUnBloc() {
 		final String content = buildContent(List.of(MenuEntry.RIGHTS, MenuEntry.STATUS));
 
-		assertTrue(content.contains("\\shell\\02status]\r\n\"MUIVerb\"=\"État de la synchronisation…\"\r\n\"CommandFlags\"=dword:00000020"));
+		assertTrue(content.contains("\\shell\\02status]\r\n\"MUIVerb\"=\"Synchronization status…\"\r\n\"CommandFlags\"=dword:00000020"));
 	}
 
 	@Test
 	void groupeAvecEspaces_echappeDansLeReg() {
 		final String content = buildContent(List.of(MenuEntry.GROUPS));
 
-		assertTrue(content.contains("\"MUIVerb\"=\"Ajouter Famille Dupont\""));
+		assertTrue(content.contains("\"MUIVerb\"=\"Add Famille Dupont\""));
 		assertTrue(content.contains(" grant \\\"Famille Dupont\\\" \\\"%V\\\"\""));
 	}
 

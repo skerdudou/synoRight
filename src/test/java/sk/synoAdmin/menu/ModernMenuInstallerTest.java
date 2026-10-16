@@ -22,10 +22,11 @@ class ModernMenuInstallerTest {
 		assertTrue(content.startsWith("Windows Registry Editor Version 5.00\r\n"));
 		assertTrue(content.contains("[-HKEY_CURRENT_USER\\Software\\synoRight\\Menu]"));
 		assertTrue(content.contains("[HKEY_CURRENT_USER\\Software\\synoRight\\Menu]\r\n\"Launcher\"=\"C:\\\\Apps\\\\synoRight\\\\synoRightGui.exe\"\r\n"
-				+ "\"ConfigDir\"=\"D:\\\\conf dir\"\r\n\"PhotoFolder\"=\"P:\\\\\"\r\n\"HideInLegacyMenu\"=dword:00000000\r\n"));
-		assertTrue(content.contains("[HKEY_CURRENT_USER\\Software\\synoRight\\Menu\\Entries\\01]\r\n\"Title\"=\"Droits du dossier…\"\r\n"
+				+ "\"ConfigDir\"=\"D:\\\\conf dir\"\r\n\"PhotoFolder\"=\"P:\\\\\"\r\n\"HideInLegacyMenu\"=dword:00000000\r\n"
+				+ "\"RootTitle\"=\"Synology Photos permissions\"\r\n"));
+		assertTrue(content.contains("[HKEY_CURRENT_USER\\Software\\synoRight\\Menu\\Entries\\01]\r\n\"Title\"=\"Folder permissions…\"\r\n"
 				+ "\"Args\"=\"-c \\\"D:\\\\conf dir\\\" rights \\\"%V\\\"\"\r\n\"SeparatorBefore\"=dword:00000000"));
-		assertTrue(content.contains("[HKEY_CURRENT_USER\\Software\\synoRight\\Menu\\Entries\\02]\r\n\"Title\"=\"État de la synchronisation…\"\r\n"
+		assertTrue(content.contains("[HKEY_CURRENT_USER\\Software\\synoRight\\Menu\\Entries\\02]\r\n\"Title\"=\"Synchronization status…\"\r\n"
 				+ "\"Args\"=\"-c \\\"D:\\\\conf dir\\\" sync\"\r\n\"SeparatorBefore\"=dword:00000001"));
 	}
 

@@ -8,6 +8,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.i18n.Language;
+import sk.synoAdmin.i18n.Messages;
 
 class MenuDefinitionTest {
 	private static final List<Group> GROUPS = List.of(new Group("3", "famille"), new Group("5", "Amis & \"co\""));
@@ -22,7 +24,7 @@ class MenuDefinitionTest {
 		assertEquals(List.of("sync"), items.get(1).args());
 		assertEquals(List.of("sync", "--push"), items.get(2).args());
 		assertEquals(List.of("config"), items.get(3).args());
-		assertEquals("Droits du dossier…", items.get(0).title());
+		assertEquals("Folder permissions…", items.get(0).title());
 	}
 
 	@Test
@@ -30,10 +32,25 @@ class MenuDefinitionTest {
 		final List<MenuDefinition.MenuItem> items = MenuDefinition.build(List.of(MenuEntry.GROUPS), GROUPS);
 
 		assertEquals(List.of("01add3", "02del3", "03add5", "04del5"), items.stream().map(MenuDefinition.MenuItem::key).toList());
-		assertEquals("Ajouter famille", items.get(0).title());
-		assertEquals("Retirer famille", items.get(1).title());
+		assertEquals("Add famille", items.get(0).title());
+		assertEquals("Remove famille", items.get(1).title());
 		assertEquals(List.of("grant", "famille", "%V"), items.get(0).args());
 		assertEquals(List.of("revoke", "Amis & \"co\"", "%V"), items.get(3).args());
+	}
+
+	@Test
+	void titres_enFrancais() {
+		Messages.setLanguage(Language.FR);
+		try {
+			final List<MenuDefinition.MenuItem> items = MenuDefinition.build(List.of(MenuEntry.RIGHTS, MenuEntry.GROUPS), GROUPS);
+
+			assertEquals("Droits du dossier…", items.get(0).title());
+			assertEquals("Ajouter famille", items.get(1).title());
+			assertEquals("Retirer famille", items.get(2).title());
+			assertEquals("Droits Synology Photos", MenuDefinition.rootTitle());
+		} finally {
+			Messages.setLanguage(Language.EN);
+		}
 	}
 
 	@Test

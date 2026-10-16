@@ -147,7 +147,8 @@ public final class ModernMenuInstaller {
 				.append("\"Launcher\"=\"").append(escape(launcherExe)).append("\"\r\n")
 				.append("\"ConfigDir\"=\"").append(escape(configDir.toString())).append("\"\r\n")
 				.append("\"PhotoFolder\"=\"").append(escape(photoFolder)).append("\"\r\n")
-				.append("\"HideInLegacyMenu\"=dword:0000000").append(hideInLegacyMenu ? "1" : "0").append("\r\n");
+				.append("\"HideInLegacyMenu\"=dword:0000000").append(hideInLegacyMenu ? "1" : "0").append("\r\n")
+					.append("\"RootTitle\"=\"").append(escape(MenuDefinition.rootTitle())).append("\"\r\n");
 		int index = 1;
 		for (final MenuItem item : items) {
 			final List<String> args = new ArrayList<>(List.of("-c", configDir.toString()));

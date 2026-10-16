@@ -7,3 +7,7 @@
 /.classpath
 /.project
 /.settings/
+
+# certificat de signature du menu Windows 11
+*.pfx
+*.pfx.pwd

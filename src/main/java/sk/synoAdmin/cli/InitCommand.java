@@ -15,6 +15,7 @@ import picocli.CommandLine.Command;
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
+import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
 import sk.synoAdmin.synology.SynoApiClient;
@@ -117,7 +118,7 @@ final class InitCommand extends AbstractCommand {
 		if (System.getProperty("os.name", "").toLowerCase().startsWith("windows")
 				&& ConsoleUtil.promptBool("Installer (ou mettre à jour) le menu contextuel de l'Explorateur ?")) {
 			try {
-				ConfigCommands.installMenu(pref, dir);
+				System.out.println(MenuService.install(pref, MenuService.effectiveTarget(pref)));
 			} catch (final UserException e) {
 				System.out.println("Menu non installé : " + e.getMessage());
 			}

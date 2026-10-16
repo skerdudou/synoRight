@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import picocli.CommandLine;
 import picocli.CommandLine.ParseResult;
+import sk.synoAdmin.menu.MenuTarget;
 
 class CliTest {
 
@@ -85,6 +86,14 @@ class CliTest {
 		assertEquals("https://nas:5001", InitCommand.normalizeUrl("nas:5001/"));
 		assertEquals("http://nas:5000", InitCommand.normalizeUrl(" http://nas:5000 "));
 		assertEquals("HTTPS://nas", InitCommand.normalizeUrl("HTTPS://nas"));
+	}
+
+	@Test
+	void menuInstall_cibleExplicite() {
+		final ParseResult result = parse(new SynoRightCommand(), "menu", "install", "--classic");
+		final ConfigCommands.MenuInstall install = (ConfigCommands.MenuInstall) result.subcommand().subcommand().commandSpec().userObject();
+
+		assertEquals(MenuTarget.CLASSIC, install.target());
 	}
 
 }

@@ -2,7 +2,6 @@ package sk.synoAdmin.cli;
 
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -10,13 +9,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.Group;
-import sk.synoAdmin.menu.ClassicMenuInstaller;
-import sk.synoAdmin.menu.MenuDefinition;
+import sk.synoAdmin.menu.MenuEntry;
+import sk.synoAdmin.menu.MenuService;
+import sk.synoAdmin.menu.MenuTarget;
 import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
 import sk.synoAdmin.synology.SynoApiClient;
@@ -59,19 +60,20 @@ final class ConfigCommands {
 		return ok;
 	}
 
-	// provisoire : remplacé par MenuService
-	static void installMenu(final Preferences pref, final Path dir) {
-		ClassicMenuInstaller.install(MenuDefinition.build(pref.getMenuEntries(), pref.getGroups()), pref.getNasFolder(), dir);
-		System.out.println("Menu contextuel installé pour l'utilisateur courant.");
+	static String describe(final MenuService.Status status) {
+		if (status.classic() && status.modern()) {
+			return "Windows 11 et classique";
+		}
+		if (status.modern()) {
+			return "Windows 11";
+		}
+		return status.classic() ? "classique" : "non installé";
 	}
 
 	// les entrées de groupes du menu contextuel suivent la configuration
 	private static void refreshMenu(final Preferences pref) {
-		if (!ClassicMenuInstaller.isInstalled()) {
-			return;
-		}
 		try {
-			installMenu(pref, pref.getConfigDir());
+			MenuService.refresh(pref);
 		} catch (final UserException e) {
 			System.out.println("Menu contextuel non mis à jour (" + e.getMessage() + ") : relancer 'synoRight menu install'.");
 		}
@@ -93,7 +95,8 @@ final class ConfigCommands {
 					? "validation standard" : "auto-signé accepté (SHA-256 " + pref.getCertFingerprint() + ")"));
 			System.out.println("Verbose        : " + pref.isVerbose());
 			System.out.println("Session        : " + (pref.getSession().getCookieSession() == null ? "aucune" : "mémorisée"));
-			System.out.println("Menu Explorer  : " + (ClassicMenuInstaller.isInstalled() ? "installé" : "non installé"));
+			System.out.println("Menu Explorer  : " + describe(MenuService.status()));
+			System.out.println("Entrées menu   : " + pref.getMenuEntries().stream().map(MenuEntry::id).collect(Collectors.joining(", ")));
 			System.out.println();
 
 			boolean folderOk;
@@ -217,17 +220,40 @@ final class ConfigCommands {
 	static final class Menu extends AbstractCommand {
 		@Override
 		void execute() {
-			System.out.println("Menu contextuel : " + (ClassicMenuInstaller.isInstalled() ? "installé" : "non installé")
-					+ ". Utiliser 'menu install' ou 'menu uninstall'.");
+			System.out.println("Menu contextuel : " + describe(MenuService.status())
+					+ ". Utiliser 'menu install [--modern|--classic|--all]' ou 'menu uninstall'.");
 		}
 	}
 
 	@Command(name = "install", description = "Installe (ou met à jour) le menu contextuel pour l'utilisateur courant.")
 	static final class MenuInstall extends AbstractCommand {
+		@ArgGroup(exclusive = true)
+		TargetOption targetOption;
+
+		static final class TargetOption {
+			@Option(names = "--modern", description = "Menu principal de Windows 11 (une autorisation administrateur la première fois).")
+			boolean modern;
+			@Option(names = "--classic", description = "Menu classique (Afficher plus d'options).")
+			boolean classic;
+			@Option(names = "--all", description = "Les deux menus.")
+			boolean all;
+		}
+
+		MenuTarget target() {
+			if (targetOption == null) {
+				return null;
+			}
+			return targetOption.modern ? MenuTarget.MODERN : targetOption.classic ? MenuTarget.CLASSIC : MenuTarget.ALL;
+		}
+
 		@Override
 		void execute() {
 			final Preferences pref = loadPrefs();
-			installMenu(pref, pref.getConfigDir());
+			if (target() != null) {
+				pref.setMenuTarget(target());
+				pref.save();
+			}
+			System.out.println(MenuService.install(pref, MenuService.effectiveTarget(pref)));
 		}
 	}
 
@@ -235,7 +261,7 @@ final class ConfigCommands {
 	static final class MenuUninstall extends AbstractCommand {
 		@Override
 		void execute() {
-			ClassicMenuInstaller.uninstall();
+			MenuService.uninstall();
 			System.out.println("Menu contextuel désinstallé.");
 		}
 	}

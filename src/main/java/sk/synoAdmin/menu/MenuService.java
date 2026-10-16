@@ -42,10 +42,12 @@ public final class MenuService {
 		final boolean classic = target != MenuTarget.MODERN;
 
 		if (modern && classic) {
+			// le menu classique tient « Afficher plus d'options » : l'entrée du package s'y masque
 			installBoth(() -> ClassicMenuInstaller.install(classicItems, pref.getNasFolder(), pref.getConfigDir()),
-					() -> ModernMenuInstaller.install(modernItems, pref.getConfigDir(), pref.getNasFolder()));
+					() -> ModernMenuInstaller.install(modernItems, pref.getConfigDir(), pref.getNasFolder(), true));
 		} else if (modern) {
-			ModernMenuInstaller.install(modernItems, pref.getConfigDir(), pref.getNasFolder());
+			// sans menu classique, l'entrée du package reste visible aussi dans « Afficher plus d'options »
+			ModernMenuInstaller.install(modernItems, pref.getConfigDir(), pref.getNasFolder(), false);
 			ClassicMenuInstaller.uninstall();
 		} else {
 			if (ModernMenuInstaller.isInstalled()) {
@@ -56,7 +58,9 @@ public final class MenuService {
 		return "Menu contextuel installé pour l'utilisateur courant ("
 				+ (modern && classic ? "Windows 11 : " + modernItems.size() + " entrée(s), classique : " + classicItems.size() + " entrée(s)"
 						: modern ? "Windows 11, " + modernItems.size() + " entrée(s)" : "classique, " + classicItems.size() + " entrée(s)")
-				+ ").";
+				+ ")."
+				// l'Explorateur garde parfois en cache l'état précédent du package
+				+ (modern ? "\nSi le menu Windows 11 n'apparaît pas ou n'est pas à jour, redémarrer l'Explorateur (ou fermer puis rouvrir la session)." : "");
 	}
 
 	/** Entrées du menu Windows 11 (modern) ou du menu classique, selon la configuration. */
@@ -86,11 +90,12 @@ public final class MenuService {
 
 	/** Met à jour les menus installés après un changement de groupes ou d'entrées (sans réinstaller le package). */
 	public static void refresh(final Preferences pref) {
-		if (ClassicMenuInstaller.isInstalled()) {
+		final boolean classic = ClassicMenuInstaller.isInstalled();
+		if (classic) {
 			ClassicMenuInstaller.install(items(pref, false), pref.getNasFolder(), pref.getConfigDir());
 		}
 		if (ModernMenuInstaller.isInstalled()) {
-			ModernMenuInstaller.refreshEntries(items(pref, true), pref.getConfigDir(), pref.getNasFolder());
+			ModernMenuInstaller.refreshEntries(items(pref, true), pref.getConfigDir(), pref.getNasFolder(), classic);
 		}
 	}
 }

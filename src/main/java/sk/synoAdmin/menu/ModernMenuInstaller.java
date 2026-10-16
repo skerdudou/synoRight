@@ -72,8 +72,13 @@ public final class ModernMenuInstaller {
 		return matcher.find() ? Integer.parseInt(matcher.group(1)) : 0;
 	}
 
-	/** Approuve le certificat, installe le package sparse puis écrit les entrées du menu. */
-	public static void install(final List<MenuItem> items, final Path configDir, final String photoFolder) {
+	/**
+	 * Approuve le certificat, installe le package sparse puis écrit les entrées du menu.
+	 *
+	 * @param hideInLegacyMenu true si le menu classique est aussi installé : sous Windows 11, l'entrée du package
+	 *            apparaît aussi dans « Afficher plus d'options », la DLL s'y masque pour ne pas doubler le menu classique
+	 */
+	public static void install(final List<MenuItem> items, final Path configDir, final String photoFolder, final boolean hideInLegacyMenu) {
 		final Availability availability = availability();
 		if (!availability.available()) {
 			throw new UserException("Menu Windows 11 indisponible : " + availability.reason() + ".");
@@ -90,17 +95,17 @@ public final class ModernMenuInstaller {
 		if (!added.ok()) {
 			throw new UserException("Installation du package du menu Windows 11 en échec : " + added.output());
 		}
-		refreshEntries(items, configDir, photoFolder);
+		refreshEntries(items, configDir, photoFolder, hideInLegacyMenu);
 	}
 
 	private static UserException notInstalledApp() {
 		return new UserException("Menu Windows 11 non mis à jour : lancer synoRight.exe (l'application installée) pour le mettre à jour.");
 	}
 
-	/** Réécrit les entrées du menu dans le registre, sans réinstaller le package. */
-	public static void refreshEntries(final List<MenuItem> items, final Path configDir, final String photoFolder) {
+	/** Réécrit les entrées du menu dans le registre, sans réinstaller le package (voir install pour hideInLegacyMenu). */
+	public static void refreshEntries(final List<MenuItem> items, final Path configDir, final String photoFolder, final boolean hideInLegacyMenu) {
 		final String launcher = Launchers.appDir().orElseThrow(ModernMenuInstaller::notInstalledApp).resolve(Launchers.GUI_EXE).toString();
-		ClassicMenuInstaller.importRegFile(buildRegFileContent(items, launcher, configDir, photoFolder));
+		ClassicMenuInstaller.importRegFile(buildRegFileContent(items, launcher, configDir, photoFolder, hideInLegacyMenu));
 	}
 
 	/** Retire le package et la configuration du menu. */
@@ -132,14 +137,16 @@ public final class ModernMenuInstaller {
 				&& powershell("if (Get-AppxPackage -Name " + PACKAGE_NAME + ") { 'installe' }").output().contains("installe");
 	}
 
-	static String buildRegFileContent(final List<MenuItem> items, final String launcherExe, final Path configDir, final String photoFolder) {
+	static String buildRegFileContent(final List<MenuItem> items, final String launcherExe, final Path configDir, final String photoFolder,
+			final boolean hideInLegacyMenu) {
 		final StringBuilder reg = new StringBuilder("Windows Registry Editor Version 5.00\r\n");
 		// suppression préalable : entrées obsolètes
 		reg.append("\r\n[-").append(MENU_KEY).append("]\r\n");
 		reg.append("\r\n[").append(MENU_KEY).append("]\r\n")
 				.append("\"Launcher\"=\"").append(escape(launcherExe)).append("\"\r\n")
 				.append("\"ConfigDir\"=\"").append(escape(configDir.toString())).append("\"\r\n")
-				.append("\"PhotoFolder\"=\"").append(escape(photoFolder)).append("\"\r\n");
+				.append("\"PhotoFolder\"=\"").append(escape(photoFolder)).append("\"\r\n")
+				.append("\"HideInLegacyMenu\"=dword:0000000").append(hideInLegacyMenu ? "1" : "0").append("\r\n");
 		int index = 1;
 		for (final MenuItem item : items) {
 			final List<String> args = new ArrayList<>(List.of("-c", configDir.toString()));

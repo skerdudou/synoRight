@@ -312,7 +312,7 @@ private:
 // Hors du namespace anonyme : CoCreatableClass référence l'entrée de fabrique par un nom
 // décoré (/include du linker), qui doit être visible hors de cette unité de compilation.
 class __declspec(uuid("7B3F9E62-5C1A-4D8B-9E2F-3A6C1D4B8F10")) RootCommand final
-	: public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite> {
+	: public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite, IObjectWithSelection> {
 public:
 	IFACEMETHODIMP GetTitle(IShellItemArray*, LPWSTR* const name) override {
 		return SHStrDupW(ROOT_TITLE, name);
@@ -342,10 +342,17 @@ public:
 	IFACEMETHODIMP GetState(IShellItemArray* const items, BOOL, EXPCMDSTATE* const state) override {
 		// toute erreur : entrée masquée (jamais d'exception vers l'Explorateur)
 		*state = ECS_HIDDEN;
+		stateQueried_ = true;
 		try {
+			// menu « Afficher plus d'options » alors que le menu classique (registre) y est aussi installé :
+			// on s'efface pour ne pas apparaître deux fois
+			if (legacyMenu_ && ReadDword(HKEY_CURRENT_USER, MENU_KEY, L"HideInLegacyMenu") != 0) {
+				return S_OK;
+			}
 			Config config;
 			std::wstring path;
-			if (LoadConfig(config) && TargetPath(items, site_.Get(), path) && IsUnder(path, config.photoFolder)) {
+			if (LoadConfig(config) && TargetPath(items != nullptr ? items : selection_.Get(), site_.Get(), path)
+				&& IsUnder(path, config.photoFolder)) {
 				*state = ECS_ENABLED;
 			}
 		} catch (...) {
@@ -397,8 +404,26 @@ public:
 		return site_ ? site_.CopyTo(riid, site) : E_FAIL;
 	}
 
+	// Pas d'API pour savoir dans quel menu on est : le menu « Afficher plus d'options » appelle SetSelection
+	// avant tout GetState, le menu principal de Windows 11 commence par GetState (ordre constaté, non documenté).
+	// Si l'ordre change, on retombe sur l'affichage dans les deux menus, jamais sur une entrée disparue du menu principal.
+	IFACEMETHODIMP SetSelection(IShellItemArray* const items) override {
+		if (!stateQueried_) {
+			legacyMenu_ = true;
+		}
+		selection_ = items;
+		return S_OK;
+	}
+	IFACEMETHODIMP GetSelection(REFIID riid, void** const items) override {
+		*items = nullptr;
+		return selection_ ? selection_.CopyTo(riid, items) : E_FAIL;
+	}
+
 private:
 	ComPtr<IUnknown> site_;
+	ComPtr<IShellItemArray> selection_;
+	bool stateQueried_ = false;
+	bool legacyMenu_ = false;
 };
 
 CoCreatableClass(RootCommand)

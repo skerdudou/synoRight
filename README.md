@@ -106,6 +106,8 @@ Le menu contextuel « Droits Synology Photos » (clic droit sur un dossier ou su
 - **Windows 11** : le menu apparaît **au premier niveau** du clic droit. Il repose sur le package `synoRight` et la DLL `synoRightMenu.dll`. La première installation sur un poste demande une **autorisation administrateur** (une seule fois) pour approuver le certificat `CN=synoRight` qui signe le package. L'invite UAC affiche « Windows PowerShell » : elle importe `synoRight.cer` (du dossier de l'application) dans le magasin « Personnes autorisées » (TrustedPeople) de l'ordinateur.
 - **Classique** : le menu est sous « Afficher plus d'options », écrit sous `HKCU` (pas de droits administrateur).
 - Sans choix, Windows 11 est utilisé s'il est disponible, sinon le menu classique (`menuTarget`).
+- Sous Windows 11, l'entrée du menu Windows 11 apparaît **aussi** dans « Afficher plus d'options » (comportement de Windows pour les extensions de package). Avec « Les deux », elle s'y masque pour laisser la place au menu classique et à ses propres entrées ; avec « Windows 11 » seul, c'est elle qu'on y retrouve.
+- Après une installation ou une mise à jour, si le menu Windows 11 n'apparaît pas ou n'est pas à jour, redémarrer l'Explorateur (cache de Windows).
 
 Les entrées sont au choix, **séparément pour chaque menu** (`menuEntries.modern`, `menuEntries.classic`) : droits du dossier, ouvrir dans Synology Photos, état de la synchro, les deux synchros complètes, ajout/retrait de chaque groupe configuré, configuration de synoRight. Les changements de groupes ou d'entrées sont pris en compte **sans réinstaller** (`groups add/remove` et la fenêtre de configuration mettent le menu à jour).
 

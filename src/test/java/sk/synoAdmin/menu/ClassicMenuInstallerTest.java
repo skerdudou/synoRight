@@ -37,6 +37,15 @@ class ClassicMenuInstallerTest {
 	}
 
 	@Test
+	void clesRacines_iconeDuLanceur() {
+		final String content = buildContent(List.of(MenuEntry.RIGHTS));
+
+		// sur la clé du dossier et sur celle du fond de dossier
+		final String icon = "\"Icon\"=\"C:\\\\Java\\\\bin\\\\javaw.exe,0\"";
+		assertTrue(content.indexOf(icon) >= 0 && content.indexOf(icon) != content.lastIndexOf(icon));
+	}
+
+	@Test
 	void appliesTo_restreintAuDossierPhotos() {
 		// \\NAS\photo\* avec les backslashs doublés au format .reg
 		assertTrue(buildContent(List.of(MenuEntry.RIGHTS)).contains("\"AppliesTo\"=\"\\\\\\\\NAS\\\\photo\\\\*\""));

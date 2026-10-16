@@ -58,13 +58,17 @@ public final class ClassicMenuInstaller {
 		final StringBuilder reg = new StringBuilder("Windows Registry Editor Version 5.00\r\n");
 
 		// entrée racine du menu : clic droit sur un dossier (limité à l'arborescence photo)...
+		// icône de l'entrée racine : celle du lanceur, comme le menu Windows 11
+		final String icon = "\"Icon\"=\"" + escape(launcher.get(0) + ",0") + "\"";
 		appendKey(reg, FOLDER_KEY,
 				"\"MUIVerb\"=\"" + escape(MenuDefinition.ROOT_TITLE) + "\"",
+				icon,
 				"\"ExtendedSubCommandsKey\"=\"" + escape(SUBMENU_REF) + "\"",
 				"\"AppliesTo\"=\"" + escape(nasFolder + "\\*") + "\"");
 		// ... et clic droit sur le fond du dossier ouvert
 		appendKey(reg, BACKGROUND_KEY,
 				"\"MUIVerb\"=\"" + escape(MenuDefinition.ROOT_TITLE) + "\"",
+				icon,
 				"\"ExtendedSubCommandsKey\"=\"" + escape(SUBMENU_REF) + "\"");
 
 		final List<String> base = new ArrayList<>(launcher);

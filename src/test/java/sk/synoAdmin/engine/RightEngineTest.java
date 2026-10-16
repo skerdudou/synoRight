@@ -9,10 +9,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import sk.synoAdmin.FakeDsm;
@@ -71,7 +74,8 @@ class RightEngineTest {
 		dsm.album(null, 1, "/a", 3).album(null, 3, "/c").album(1, 2, "/a/b", 3, 5);
 		Files.createFile(rightFile("c", FAMILLE)); // plus autorisé dans Photos
 
-		loadedEngine().dbToFs(true, false);
+		final RightEngine engine = loadedEngine();
+		engine.apply(engine.planPull());
 
 		assertTrue(Files.exists(rightFile("a", FAMILLE)));
 		assertTrue(Files.exists(rightFile("a/b", FAMILLE)));
@@ -87,7 +91,8 @@ class RightEngineTest {
 		Files.createFile(rightFile("a", FAMILLE));
 		Files.createFile(rightFile("a/b", FAMILLE));
 
-		loadedEngine().fsToDb(true, false);
+		final RightEngine engine = loadedEngine();
+		engine.apply(engine.planPush());
 
 		assertEquals(List.of(
 				"{\"id\":3,\"type\":\"group\",\"list\":[{\"folder_id\":1,\"action\":\"update\",\"role\":\"download\"},"
@@ -97,17 +102,95 @@ class RightEngineTest {
 	}
 
 	@Test
-	void simulation_rienNEstModifie() throws IOException {
+	void plan_neModifieRien() throws IOException {
 		dsm.album(null, 1, "/a", 3).album(null, 3, "/c").album(1, 2, "/a/b");
 		Files.createFile(rightFile("c", AMIS));
 
 		final RightEngine engine = loadedEngine();
-		engine.dbToFs(true, true);
-		engine.fsToDb(true, true);
+		final SyncPlan pull = engine.planPull();
+		final SyncPlan push = engine.planPush();
 
+		assertEquals(SyncPlan.Direction.PULL, pull.direction());
+		assertEquals(2, pull.changeCount()); // famille ajouté sur /a, amis retiré de /c
+		assertEquals(2, push.changeCount());
+		assertEquals(3, push.folderCount());
 		assertFalse(Files.exists(rightFile("a", FAMILLE)));
 		assertTrue(Files.exists(rightFile("c", AMIS)));
 		assertTrue(dsm.permissionUpdates().isEmpty());
+	}
+
+	@Test
+	void plan_signaleDossiersNonIndexesEtInconnus() throws IOException {
+		dsm.album(null, 1, "/a").album(null, 9, "/z", 3).album(1, 2, "/a/b");
+
+		final SyncPlan plan = loadedEngine().planPush();
+
+		assertEquals(List.of("/c"), plan.unindexedFolders());
+		assertEquals(List.of("/z"), plan.unknownFolders());
+	}
+
+	@Test
+	void folderRights_etatPhotosEtFichierParGroupe() throws IOException {
+		dsm.album(null, 1, "/a", 3).album(1, 2, "/a/b");
+		Files.createFile(rightFile("a", AMIS));
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final FolderRights rights = engine.folderRights(photos.resolve("a").toString());
+
+		assertEquals("/a", rights.folderName());
+		assertEquals(List.of(new FolderRights.GroupRight(FAMILLE, true, false), new FolderRights.GroupRight(AMIS, false, true)), rights.rights());
+		assertTrue(rights.hasGap());
+	}
+
+	@Test
+	void setFolderRights_ajouteEtRetireSelonLaCible() throws IOException {
+		dsm.album(null, 1, "/a", 3).album(1, 2, "/a/b", 3);
+		Files.createFile(rightFile("a/b", FAMILLE));
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final List<String> messages = engine.setFolderRights(photos.resolve("a/b").toString(), Set.of(AMIS));
+
+		// groupes traités dans l'ordre de la configuration : famille (retrait) puis amis (ajout, parent compris)
+		assertEquals(List.of(
+				"{\"id\":3,\"type\":\"group\",\"list\":[{\"folder_id\":2,\"action\":\"delete\"}]}",
+				"{\"id\":5,\"type\":\"group\",\"list\":[{\"folder_id\":2,\"action\":\"update\",\"role\":\"download\"},{\"folder_id\":1,\"action\":\"update\",\"role\":\"download\"}]}"),
+				dsm.permissionUpdates());
+		assertTrue(Files.exists(rightFile("a/b", AMIS)));
+		assertTrue(Files.exists(rightFile("a", AMIS)));
+		assertFalse(Files.exists(rightFile("a/b", FAMILLE)));
+		assertEquals(2, messages.size());
+	}
+
+	@Test
+	void setFolderRights_dejaConforme_rienAFaire() throws IOException {
+		dsm.album(null, 1, "/a", 3);
+		Files.createFile(rightFile("a", FAMILLE));
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+
+		assertTrue(engine.setFolderRights(photos.resolve("a").toString(), Set.of(FAMILLE)).isEmpty());
+		assertTrue(dsm.permissionUpdates().isEmpty());
+	}
+
+	@Test
+	void folderId_idSynologyDuDossier() {
+		dsm.album(null, 1, "/a").album(1, 2, "/a/b");
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+
+		assertEquals(2, engine.folderId(photos.resolve("a/b").toString()));
+	}
+
+	@Test
+	@EnabledOnOs(OS.WINDOWS)
+	void checkFolder_casseDifferente_accepte() {
+		final String autreCasse = photos.resolve("a").toString().toUpperCase();
+
+		assertEquals("a", new RightEngine(pref).checkFolder(autreCasse).toString().toLowerCase());
 	}
 
 	@Test
@@ -116,7 +199,8 @@ class RightEngineTest {
 		dsm.album(null, 1, "/a").album(null, 9, "/z", 3).album(1, 2, "/a/b");
 		Files.createFile(rightFile("c", FAMILLE));
 
-		loadedEngine().fsToDb(true, false);
+		final RightEngine engine = loadedEngine();
+		engine.apply(engine.planPush());
 
 		// rien à pousser : le seul écart concerne /c, ignoré
 		assertTrue(dsm.permissionUpdates().isEmpty());
@@ -128,7 +212,9 @@ class RightEngineTest {
 
 		final RightEngine engine = new RightEngine(pref);
 		engine.login();
-		engine.addRightToFolder(photos.resolve("a/b").toString(), AMIS);
+		final String message = engine.addRightToFolder(photos.resolve("a/b").toString(), AMIS);
+
+		assertTrue(message.contains("amis"));
 
 		assertEquals(List.of("{\"id\":5,\"type\":\"group\",\"list\":["
 				+ "{\"folder_id\":2,\"action\":\"update\",\"role\":\"download\"},"

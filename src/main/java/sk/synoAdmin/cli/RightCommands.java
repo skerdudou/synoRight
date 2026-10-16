@@ -6,6 +6,7 @@ import picocli.CommandLine.Parameters;
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.RightEngine;
+import sk.synoAdmin.engine.SyncPlan;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
@@ -23,7 +24,9 @@ final class RightCommands {
 		void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.getFullState();
-			re.status();
+			final SyncPlan plan = re.planPush();
+			RightReports.printWarnings(plan);
+			RightReports.printStatus(plan);
 		}
 	}
 
@@ -44,7 +47,9 @@ final class RightCommands {
 		void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.getFullState();
-			LogUtil.runMonitored(() -> re.dbToFs(yes, dryRun), "Action time");
+			final SyncPlan plan = re.planPull();
+			RightReports.printWarnings(plan);
+			LogUtil.runMonitored(() -> RightReports.confirmAndApply(re, plan, yes, dryRun), "Action time");
 		}
 	}
 
@@ -54,7 +59,9 @@ final class RightCommands {
 		void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.getFullState();
-			LogUtil.runMonitored(() -> re.fsToDb(yes, dryRun), "Action time");
+			final SyncPlan plan = re.planPush();
+			RightReports.printWarnings(plan);
+			LogUtil.runMonitored(() -> RightReports.confirmAndApply(re, plan, yes, dryRun), "Action time");
 		}
 	}
 
@@ -68,7 +75,7 @@ final class RightCommands {
 			final RightEngine re = new RightEngine(loadPrefs());
 			re.checkFolder(folder); // avant toute connexion
 			re.login();
-			re.showFolder(folder);
+			RightReports.printFolder(re.folderRights(folder));
 		}
 	}
 
@@ -87,7 +94,7 @@ final class RightCommands {
 			final RightEngine re = new RightEngine(pref);
 			re.checkFolder(folder); // avant toute connexion
 			re.login();
-			LogUtil.runMonitored(() -> re.addRightToFolder(folder, grp), "Action time");
+			LogUtil.runMonitored(() -> System.out.println(re.addRightToFolder(folder, grp)),"Action time");
 		}
 	}
 
@@ -106,7 +113,7 @@ final class RightCommands {
 			final RightEngine re = new RightEngine(pref);
 			re.checkFolder(folder); // avant toute connexion
 			re.login();
-			LogUtil.runMonitored(() -> re.removeRightToFolder(folder, grp), "Action time");
+			LogUtil.runMonitored(() -> System.out.println(re.removeRightToFolder(folder, grp)),"Action time");
 		}
 	}
 }

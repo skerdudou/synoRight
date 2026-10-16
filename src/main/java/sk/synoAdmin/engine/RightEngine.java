@@ -7,14 +7,14 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
 
-import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.engine.DeltaResolver.GrpDelta;
@@ -31,6 +31,8 @@ public class RightEngine {
 	private final SynoApiClient synoClient;
 
 	private final List<Folder> folders = new ArrayList<>();
+	private final List<String> unindexedFolders = new ArrayList<>();
+	private final List<String> unknownFolders = new ArrayList<>();
 
 	public RightEngine(final Preferences pref) {
 		this.pref = pref;
@@ -122,14 +124,10 @@ public class RightEngine {
 
 		// dossiers exclus de la synchro : avertissement plutôt que blocage
 		if (!foldersToScan.isEmpty()) {
-			System.out.println("Attention, dossiers pas encore indexés par Synology Photos (ignorés) : "
-					+ foldersToScan.stream().map(Folder::getName).collect(Collectors.joining(", ")));
+			unindexedFolders.addAll(foldersToScan.stream().map(Folder::getName).toList());
 			folders.removeAll(foldersToScan);
 		}
-		if (!unknownInFs.isEmpty()) {
-			System.out.println("Attention, dossiers connus de Synology Photos mais absents du partage (ignorés) : "
-					+ String.join(", ", unknownInFs));
-		}
+		unknownFolders.addAll(unknownInFs);
 	}
 
 	private void updateDbInfos(final Folder folder, final SynoFolderPermission synoRight) {
@@ -144,60 +142,49 @@ public class RightEngine {
 		synoClient.login();
 	}
 
+	public SyncPlan planPush() {
+		return plan(SyncPlan.Direction.PUSH, DeltaResolver.resolveDeltasFsToDb(folders));
+	}
+
+	public SyncPlan planPull() {
+		return plan(SyncPlan.Direction.PULL, DeltaResolver.resolveDeltasDbToFs(folders));
+	}
+
+	private SyncPlan plan(final SyncPlan.Direction direction, final Map<Group, GrpDelta> deltas) {
+		// ordre de la configuration, pour un affichage stable
+		final Map<Group, GrpDelta> ordered = new LinkedHashMap<>();
+		for (final Group group : pref.getGroups()) {
+			if (deltas.containsKey(group)) {
+				ordered.put(group, deltas.get(group));
+			}
+		}
+		return new SyncPlan(direction, ordered, folders.size(), List.copyOf(unindexedFolders), List.copyOf(unknownFolders));
+	}
+
 	/**
-	 * Affiche les écarts entre les fichiers de droits et Synology Photos, sans rien modifier.
+	 * Applique un plan calculé par planPush/planPull.
+	 *
+	 * @return nombre de modifications effectuées (fichiers créés/supprimés, ou droits Photos modifiés)
 	 */
-	public void status() {
-		final Map<Group, GrpDelta> grpDeltas = DeltaResolver.resolveDeltasFsToDb(folders);
-		if (grpDeltas.isEmpty()) {
-			System.out.println("Fichiers de droits et Synology Photos sont synchronisés (" + folders.size() + " dossiers).");
-			return;
-		}
-
-		for (final Group group : pref.getGroups()) {
-			final GrpDelta grpDelta = grpDeltas.get(group);
-			if (grpDelta == null) {
-				continue;
-			}
-			System.out.println("Groupe '" + group.getName() + "' :");
-			printFolders("Dans les fichiers mais pas dans Synology Photos :", grpDelta.getToAdd());
-			printFolders("Dans Synology Photos mais pas dans les fichiers :", grpDelta.getToRemove());
-		}
-		System.out.println("-> 'push' applique les fichiers dans Synology Photos, 'pull' recrée les fichiers d'après Synology Photos.");
-	}
-
-	private static void printFolders(final String message, final List<Folder> list) {
-		if (!list.isEmpty()) {
-			System.out.println("\t" + message);
-			for (final Folder folder : list) {
-				System.out.println("\t\t" + folder.getName());
-			}
-		}
-	}
-
-	// créé les fichiers sur le NAS en fonction des droits de Synology Photos
-	public void dbToFs(final boolean assumeYes, final boolean dryRun) {
-		System.out.println("Mise à jour des fichiers de droits d'après Synology Photos.");
-
-		final Map<Group, GrpDelta> grpDeltas = DeltaResolver.resolveDeltasDbToFs(folders);
-		if (!printAndConfirmDeltas(grpDeltas, assumeYes, dryRun)) {
-			return;
-		}
-
+	public int apply(final SyncPlan plan) {
 		int count = 0;
-		for (final Group group : pref.getGroups()) {
-			final GrpDelta grpDelta = grpDeltas.get(group);
-			if (grpDelta == null) {
-				continue;
-			}
-			for (final Folder folder : grpDelta.getToAdd()) {
-				count += doCreateRightFile(group, folder) ? 1 : 0;
-			}
-			for (final Folder folder : grpDelta.getToRemove()) {
-				count += doRemoveRightFile(group, folder) ? 1 : 0;
+		for (final Map.Entry<Group, GrpDelta> entry : plan.deltas().entrySet()) {
+			final Group group = entry.getKey();
+			final GrpDelta delta = entry.getValue();
+			if (plan.direction() == SyncPlan.Direction.PUSH) {
+				// add download role (or remove)
+				synoClient.setAccessRight(group.getId(), delta.getToAdd(), delta.getToRemove());
+				count += delta.getToAdd().size() + delta.getToRemove().size();
+			} else {
+				for (final Folder folder : delta.getToAdd()) {
+					count += doCreateRightFile(group, folder) ? 1 : 0;
+				}
+				for (final Folder folder : delta.getToRemove()) {
+					count += doRemoveRightFile(group, folder) ? 1 : 0;
+				}
 			}
 		}
-		System.out.println(count + " fichier(s) de droits mis à jour.");
+		return count;
 	}
 
 	// true si le fichier a été créé
@@ -230,55 +217,16 @@ public class RightEngine {
 		return new File(folder.getFolderPath(), group.getFileName());
 	}
 
-	// Mets a jour les droits dans Synology Photos en fonction des fichiers sur le NAS
-	public void fsToDb(final boolean assumeYes, final boolean dryRun) {
-		System.out.println("Mise à jour des droits dans Synology Photos d'après les fichiers.");
-
-		final Map<Group, GrpDelta> grpDeltas = DeltaResolver.resolveDeltasFsToDb(folders);
-		if (!printAndConfirmDeltas(grpDeltas, assumeYes, dryRun)) {
-			return;
-		}
-
-		for (final Group group : pref.getGroups()) {
-			final GrpDelta grpDelta = grpDeltas.get(group);
-			if (grpDelta == null) {
-				continue;
-			}
-			// add download role (or remove)
-			synoClient.setAccessRight(group.getId(), grpDelta.getToAdd(), grpDelta.getToRemove());
-		}
-		System.out.println("Droits Synology Photos mis à jour.");
+	public String addRightToFolder(final String folder, final Group grp) {
+		return addRight(resolveFolder(folder), grp);
 	}
 
-	// affiche le détail des deltas puis demande confirmation avant application
-	private boolean printAndConfirmDeltas(final Map<Group, GrpDelta> grpDeltas, final boolean assumeYes, final boolean dryRun) {
-		if (grpDeltas.isEmpty()) {
-			System.out.println("Aucune modification à appliquer.");
-			return false;
-		}
-
-		for (final Group group : pref.getGroups()) {
-			final GrpDelta grpDelta = grpDeltas.get(group);
-			if (grpDelta != null) {
-				System.out.println("Groupe '" + group.getName() + "' :");
-				grpDelta.printAdd();
-				grpDelta.printRemove();
-			}
-		}
-
-		if (dryRun) {
-			System.out.println("Simulation : aucune modification effectuée.");
-			return false;
-		}
-		if (!assumeYes && !ConsoleUtil.promptBool("Appliquer ces modifications ?")) {
-			System.out.println("Abandon, aucune modification effectuée.");
-			return false;
-		}
-		return true;
+	public String removeRightToFolder(final String folder, final Group grp) {
+		return removeRight(resolveFolder(folder), grp);
 	}
 
-	public void addRightToFolder(final String folder, final Group grp) {
-		final Folder folderToUpdate = resolveFolder(folder);
+	// ajoute le droit côté Photos et fichiers (parent compris), renvoie le message de confirmation
+	private String addRight(final Folder folderToUpdate, final Group grp) {
 		final Folder parentFolder = folderToUpdate.getParent();
 
 		// ajout sur DB
@@ -294,40 +242,52 @@ public class RightEngine {
 			doCreateRightFile(grp, parentFolder);
 		}
 
-		System.out.println("Droit '" + grp.getName() + "' ajouté sur " + folderToUpdate.getName()
-				+ (parentFolder == null ? "" : " (et sur le dossier parent " + parentFolder.getName() + ")") + ".");
+		return "Droit '" + grp.getName() + "' ajouté sur " + folderToUpdate.getName()
+				+ (parentFolder == null ? "" : " (et sur le dossier parent " + parentFolder.getName() + ")") + ".";
 	}
 
-	public void removeRightToFolder(final String folder, final Group grp) {
-		final Folder folderToUpdate = resolveFolder(folder);
-
+	// retire le droit côté Photos et fichiers, renvoie le message de confirmation
+	private String removeRight(final Folder folderToUpdate, final Group grp) {
 		// suppression sur DB
 		synoClient.removeAccessRight(grp.getId(), folderToUpdate);
 
 		// suppression sur FS
 		doRemoveRightFile(grp, folderToUpdate);
 
-		System.out.println("Droit '" + grp.getName() + "' retiré de " + folderToUpdate.getName() + ".");
+		return "Droit '" + grp.getName() + "' retiré de " + folderToUpdate.getName() + ".";
+	}
+
+	public FolderRights folderRights(final String folder) {
+		final Folder resolved = resolveFolder(folder);
+		final List<FolderRights.GroupRight> rights = pref.getGroups().stream()
+				.map(g -> new FolderRights.GroupRight(g, resolved.getDbGroups().contains(g), resolved.getFsGroups().contains(g)))
+				.toList();
+		return new FolderRights(resolved.getName(), rights);
 	}
 
 	/**
-	 * Affiche les droits d'un dossier côté Synology Photos et côté fichiers.
+	 * Donne le droit aux groupes voulus et le retire aux autres groupes gérés, côté Photos et fichiers.
+	 *
+	 * @return description des modifications effectuées (vide si le dossier était déjà conforme)
 	 */
-	public void showFolder(final String folder) {
+	public List<String> setFolderRights(final String folder, final Set<Group> wanted) {
 		final Folder resolved = resolveFolder(folder);
+		final List<String> messages = new ArrayList<>();
+		for (final Group group : pref.getGroups()) {
+			final boolean inDb = resolved.getDbGroups().contains(group);
+			final boolean inFs = resolved.getFsGroups().contains(group);
+			if (wanted.contains(group) && !(inDb && inFs)) {
+				messages.add(addRight(resolved, group));
+			} else if (!wanted.contains(group) && (inDb || inFs)) {
+				messages.add(removeRight(resolved, group));
+			}
+		}
+		return messages;
+	}
 
-		System.out.println("Dossier " + resolved.getName() + " :");
-		boolean gap = false;
-		for (final Group grp : pref.getGroups()) {
-			final boolean inDb = resolved.getDbGroups().contains(grp);
-			final boolean inFs = resolved.getFsGroups().contains(grp);
-			gap |= inDb != inFs;
-			System.out.println("\t" + grp.getName() + " : Synology Photos " + (inDb ? "oui" : "non")
-					+ ", fichier " + (inFs ? "oui" : "non") + (inDb != inFs ? "   <- écart" : ""));
-		}
-		if (gap) {
-			System.out.println("Écarts détectés : 'push' ou 'pull' pour resynchroniser.");
-		}
+	/** Id Synology Photos du dossier. */
+	public int folderId(final String folder) {
+		return resolveFolder(folder).getId();
 	}
 
 	/**

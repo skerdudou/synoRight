@@ -869,6 +869,8 @@ final class ConfigWindow {
 			}
 			final Preferences pref = current.toPreferences(configDir, verbose);
 			pref.save();
+			// les menus de l'Explorateur (refresh, puis installation) sont réécrits dans la nouvelle langue
+			Messages.applySetting(pref.getLanguageSetting());
 			String menuError = null;
 			if (refreshMenu) {
 				try {

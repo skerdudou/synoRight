@@ -41,7 +41,7 @@ jobs:
         shell: powershell
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          $pomVersion = ([xml](Get-Content pom.xml -Raw)).project.version
+          $pomVersion = ([xml](Get-Content pom.xml -Raw -Encoding UTF8)).project.version
           if ($version -ne $pomVersion) { throw "Tag $env:GITHUB_REF_NAME does not match the pom.xml version ($pomVersion)" }
           [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$version`n")
 
@@ -69,6 +69,9 @@ jobs:
           [IO.File]::AppendAllText($env:GITHUB_ENV, "SYNORIGHT_SIGN_PFX=$pfx`n")
 
       - name: Build application
+        env:
+          # empty without secret: build.ps1 then reads the DPAPI password file next to the ephemeral pfx
+          SYNORIGHT_SIGN_PASSWORD: ${{ secrets.SYNORIGHT_SIGN_PASSWORD }}
         run: mvn -B package -Pexe -DskipTests
 
       # PowerShell 7: Compress-Archive writes portable (forward slash) zip entries
@@ -84,7 +87,7 @@ jobs:
           $notes = @(
             '## Installation'
             ''
-            "1. Download ``synoRight-$env:VERSION-windows-x64.zip`` and unzip it to its final location (e.g. ``C:\Program Files\synoRight``)."
+            "1. Download ``synoRight-$env:VERSION-windows-x64.zip`` and unzip it into e.g. ``C:\Program Files`` (the archive contains a ``synoRight`` folder; writing there needs administrator rights) or into any folder."
             '2. Run `synoRightGui.exe` to configure the NAS connection, the photo folder and the groups, then install the File Explorer menu.'
             '3. The Windows 11 menu asks once for administrator approval, to trust the `CN=synoRight` certificate shipped as `synoRight.cer`.'
             ''

@@ -36,7 +36,7 @@ synoRight synchronises the folder permissions of the **Synology Photos Shared Sp
 ## Installation
 
 1. Download `synoRight-<version>-windows-x64.zip` from the [Releases](https://github.com/skerdudou/synoRight/releases) page. It embeds its own Java runtime: nothing else to install.
-2. Unzip it to its final location (e.g. `C:\Program Files\synoRight`). The folder contains `synoRight.exe` (command line), `synoRightGui.exe` (no console) and, for the Windows 11 menu, `synoRightMenu.dll`, `synoRight.msix` and `synoRight.cer`.
+2. Unzip it into e.g. `C:\Program Files` (the archive contains a `synoRight` folder; writing there needs administrator rights) or into any folder. The `synoRight` folder contains `synoRight.exe` (command line), `synoRightGui.exe` (no console) and, for the Windows 11 menu, `synoRightMenu.dll`, `synoRight.msix` and `synoRight.cer`.
 3. Run **`synoRightGui.exe`**: the configuration window opens. Fill in the connection, test it, choose the photo folder and the groups, then install the File Explorer menu.
 
 The **Windows 11 menu** is installed for the current user, but the first installation on a computer asks **once for administrator approval**: Windows must trust the `CN=synoRight` certificate that signs the menu package. The UAC prompt shows "Windows PowerShell": it imports `synoRight.cer` (from the application folder) into the local machine "Trusted People" store. The classic menu needs no administrator rights.
@@ -49,14 +49,13 @@ A plain jar (`synoRight-<version>.jar`) is also published; it runs with `java -j
 
 ### Configuration window
 
-`synoRightGui.exe` (or `synoRight gui`) opens the configuration window, with these sections:
+`synoRightGui.exe` (or `synoRight gui`) opens the configuration window, with these sections and, in the bottom bar, the **language** combo box (automatic, i.e. Windows display language, or a fixed language):
 
 - **Connection**: DSM URL, account, password (optionally remembered), connection test (asks for the OTP if needed, offers to trust a self-signed certificate).
 - **Photo folder**: the root of the photos on the share (e.g. `\\NAS\photo`).
 - **Groups**: the NAS groups to manage, picked from the list of groups of the NAS, and their short names.
 - **Explorer menu**: entries of each menu, menu to install (Windows 11, classic or both), install / update / uninstall.
 - **Synchronization**: analysis of the differences, then Files → Photos or Photos → files after confirmation.
-- **Language**: automatic (Windows display language) or a fixed language.
 
 ### File Explorer menu
 
@@ -170,3 +169,10 @@ produces the standalone application (embedded Java runtime, built by `jpackage`)
 ## Releases and CI
 
 The GitHub Actions workflow [`build.yml`](.github/workflows/build.yml) runs the tests (`mvn verify`) on every push and pull request. Pushing a `v*` tag builds the full application with the Windows 11 menu and creates a draft pre-release with `synoRight-<version>-windows-x64.zip` and `synoRight-<version>.jar`. The menu package is signed with the certificate given by the `SYNORIGHT_SIGN_PFX_BASE64` and `SYNORIGHT_SIGN_PASSWORD` secrets, or else with a certificate generated for that build only (the release notes then say so).
+
+To create the secrets from a .pfx (e.g. the synoRight.pfx made by 
+ative\create-cert.ps1):
+
+- `SYNORIGHT_SIGN_PFX_BASE64`: the output of `[Convert]::ToBase64String([IO.File]::ReadAllBytes('synoRight.pfx'))` in PowerShell.
+- `SYNORIGHT_SIGN_PASSWORD`: the password of the .pfx. For a .pfx made by 
+ative\create-cert.ps1, it is stored DPAPI-protected in synoRight.pfx.pwd; read it, as the same Windows user, with `[System.Net.NetworkCredential]::new('', (Get-Content synoRight.pfx.pwd | ConvertTo-SecureString)).Password`.

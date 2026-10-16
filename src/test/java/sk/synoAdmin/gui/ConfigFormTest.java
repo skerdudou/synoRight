@@ -133,12 +133,12 @@ class ConfigFormTest {
 	@Test
 	void nomCourt_invalideSignale(@TempDir final Path dir) {
 		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd",
-				List.of(new Group("65536", "Kerdudou")), false);
+				List.of(new Group("65536", "Smith")), false);
 		final ConfigForm form = ConfigForm.from(pref);
 
-		form.groups = List.of(new Group("65536", "Kerdudou"), new Group("65537", "kerdudou"));
+		form.groups = List.of(new Group("65536", "Smith"), new Group("65537", "smith"));
 
-		assertEquals(List.of("Short name of the group with id 65537 is invalid (\"kerdudou\"): already used by another group."),
+		assertEquals(List.of("Short name of the group with id 65537 is invalid (\"smith\"): already used by another group."),
 				messages(form).stream().filter(p -> p.contains("65537")).toList());
 		assertTrue(form.validate().stream().allMatch(p -> p.section() == ConfigForm.Section.GROUPS));
 	}
@@ -146,14 +146,14 @@ class ConfigFormTest {
 	@Test
 	void nomCourtModifie_noteSurLesFichiersExistants(@TempDir final Path dir) {
 		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd",
-				List.of(new Group("65536", "Kerdudou"), new Group("65537", "Godmez")), false);
+				List.of(new Group("65536", "Smith"), new Group("65537", "Jones")), false);
 		final ConfigForm form = ConfigForm.from(pref);
 		assertTrue(form.renamedGroupNotes().isEmpty());
 
-		form.groups = List.of(new Group("65536", "Famille Kerdudou"), new Group("65537", "Godmez"));
+		form.groups = List.of(new Group("65536", "Smith family"), new Group("65537", "Jones"));
 
 		assertEquals(1, form.renamedGroupNotes().size());
-		assertTrue(form.renamedGroupNotes().get(0).contains("@Kerdudou.synoRight"));
+		assertTrue(form.renamedGroupNotes().get(0).contains("@Smith.synoRight"));
 	}
 
 	@Test

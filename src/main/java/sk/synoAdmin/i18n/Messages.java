@@ -31,6 +31,11 @@ public final class Messages {
 		bundle = load(newLanguage);
 	}
 
+	/** Applique le réglage de langue d'une configuration (« auto », « fr », ...) au processus courant. */
+	public static void applySetting(final String setting) {
+		setLanguage(Language.resolve(setting));
+	}
+
 	public static Language language() {
 		return language;
 	}

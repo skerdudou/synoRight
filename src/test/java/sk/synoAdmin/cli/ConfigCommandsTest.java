@@ -33,12 +33,12 @@ class ConfigCommandsTest {
 	@Test
 	void toGroup_nomCourtExistantConserve(@TempDir final Path dir) {
 		final Preferences existing = new Preferences(dir, dir.toString(), "https://nas", "admin", null,
-				List.of(new Group("65536", "Kerdudou")), false);
+				List.of(new Group("65536", "Smith")), false);
 
-		final Group group = ConfigCommands.toGroup(new SynoGroup(65536, "Famille Kerdudou"), existing, List.of());
+		final Group group = ConfigCommands.toGroup(new SynoGroup(65536, "Smith family"), existing, List.of());
 
 		assertEquals("65536", group.getId());
-		assertEquals("Kerdudou", group.getName());
+		assertEquals("Smith", group.getName());
 	}
 
 	@Test
@@ -48,11 +48,11 @@ class ConfigCommandsTest {
 
 	@Test
 	void toGroup_nomInutilisable_redemande() {
-		ConsoleUtil.setInput(new ByteArrayInputStream("kerdudou\nKerd2\n".getBytes(StandardCharsets.UTF_8)));
+		ConsoleUtil.setInput(new ByteArrayInputStream("smith\nSmith2\n".getBytes(StandardCharsets.UTF_8)));
 
-		// « a:b » interdit, puis « kerdudou » déjà pris (sans tenir compte de la casse), puis « Kerd2 » accepté
-		final Group group = ConfigCommands.toGroup(new SynoGroup(7, "a:b"), null, List.of(new Group("65536", "Kerdudou")));
+		// « a:b » interdit, puis « smith » déjà pris (sans tenir compte de la casse), puis « Smith2 » accepté
+		final Group group = ConfigCommands.toGroup(new SynoGroup(7, "a:b"), null, List.of(new Group("65536", "Smith")));
 
-		assertEquals("Kerd2", group.getName());
+		assertEquals("Smith2", group.getName());
 	}
 }

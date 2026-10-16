@@ -54,6 +54,30 @@ class MenuDefinitionTest {
 	}
 
 	@Test
+	void changementDeLangue_appliqueAuxTitresEtAuFichierReg() {
+		// la propriété système (fixée par surefire) l'emporterait sur le réglage enregistré
+		final String property = System.clearProperty(Language.SYSTEM_PROPERTY);
+		try {
+			Messages.applySetting("fr");
+			assertEquals("Droits Synology Photos", MenuDefinition.rootTitle());
+			final String fr = ModernMenuInstaller.buildRegFileContent(
+					MenuDefinition.build(List.of(MenuEntry.RIGHTS), GROUPS), "C:\\synoRightGui.exe", java.nio.file.Paths.get("D:\\conf"), "P:\\", false);
+			assertTrue(fr.contains("Droits Synology Photos"));
+
+			Messages.applySetting("en");
+			final String en = ModernMenuInstaller.buildRegFileContent(
+					MenuDefinition.build(List.of(MenuEntry.RIGHTS), GROUPS), "C:\\synoRightGui.exe", java.nio.file.Paths.get("D:\\conf"), "P:\\", false);
+			assertTrue(en.contains(MenuDefinition.rootTitle()));
+			assertTrue(!en.contains("Droits Synology Photos"));
+		} finally {
+			if (property != null) {
+				System.setProperty(Language.SYSTEM_PROPERTY, property);
+			}
+			Messages.setLanguage(Language.EN);
+		}
+	}
+
+	@Test
 	void commandLine_groupeAvecEspacesEtGuillemets() {
 		final MenuDefinition.MenuItem item = MenuDefinition.build(List.of(MenuEntry.GROUPS), GROUPS).get(2);
 

@@ -133,7 +133,7 @@ public class SynoApiClient {
 			if (isSuccess(doRequest("/webapi/entry.cgi", params))) {
 				return;
 			}
-			LogUtil.debug("Session expirée, nouveau login");
+			LogUtil.debug("Session expired, logging in again");
 		}
 
 		String pwd = initialPassword != null ? initialPassword : ConsoleUtil.promptSecret(Messages.get("synology.login.password", user));

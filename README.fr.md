@@ -13,8 +13,8 @@ synoRight synchronise les droits d'accès des dossiers de l'**espace partagé de
 
 ## Principe
 
-- Chaque groupe du NAS géré reçoit un **nom court** (ex : `Kerdudou` pour le groupe « Famille Kerdudou »). Seul l'id du groupe (gid) le relie au NAS ; le nom court sert au nom des fichiers marqueurs et aux entrées du menu.
-- Un dossier photos contient un fichier caché `@<nom court>.synoRight` pour chaque groupe autorisé à le voir. Exemple : `\\NAS\photo\2024\Vacances\@Kerdudou.synoRight`.
+- Chaque groupe du NAS géré reçoit un **nom court** (ex : `Smith` pour le groupe « Smith family »). Seul l'id du groupe (gid) le relie au NAS ; le nom court sert au nom des fichiers marqueurs et aux entrées du menu.
+- Un dossier photos contient un fichier caché `@<nom court>.synoRight` pour chaque groupe autorisé à le voir. Exemple : `\\NAS\photo\2024\Vacances\@Smith.synoRight`.
 - synoRight compare ces fichiers avec les droits réels de Synology Photos et applique le delta, dans un sens ou dans l'autre :
   - **Fichiers → Photos** (`push`) : les fichiers font foi, les droits de Synology Photos sont mis à jour. Les droits hérités du dossier parent par les nouveaux dossiers dans Synology Photos sont aussi retirés.
   - **Photos → fichiers** (`pull`) : Synology Photos fait foi, les fichiers marqueurs sont créés ou supprimés.
@@ -36,7 +36,7 @@ synoRight synchronise les droits d'accès des dossiers de l'**espace partagé de
 ## Installation
 
 1. Télécharger `synoRight-<version>-windows-x64.zip` depuis la page [Releases](https://github.com/skerdudou/synoRight/releases). Il embarque son propre runtime Java : rien d'autre à installer.
-2. Le décompresser à son emplacement définitif (ex : `C:\Program Files\synoRight`). Le dossier contient `synoRight.exe` (ligne de commande), `synoRightGui.exe` (sans console) et, pour le menu Windows 11, `synoRightMenu.dll`, `synoRight.msix` et `synoRight.cer`.
+2. Le décompresser dans par exemple `C:\Program Files` (l'archive contient un dossier `synoRight` ; écrire à cet endroit demande les droits administrateur) ou dans n'importe quel dossier. Le dossier `synoRight` contient `synoRight.exe` (ligne de commande), `synoRightGui.exe` (sans console) et, pour le menu Windows 11, `synoRightMenu.dll`, `synoRight.msix` et `synoRight.cer`.
 3. Lancer **`synoRightGui.exe`** : la fenêtre de configuration s'ouvre. Renseigner la connexion, la tester, choisir le dossier photos et les groupes, puis installer le menu de l'Explorateur.
 
 Le **menu Windows 11** s'installe pour l'utilisateur courant, mais la première installation sur un poste demande **une seule fois une autorisation administrateur** : Windows doit approuver le certificat `CN=synoRight` qui signe le package du menu. L'invite UAC affiche « Windows PowerShell » : elle importe `synoRight.cer` (du dossier de l'application) dans le magasin « Personnes autorisées » (TrustedPeople) de l'ordinateur. Le menu classique ne demande pas de droits administrateur.
@@ -49,14 +49,13 @@ Un jar seul (`synoRight-<version>.jar`) est aussi publié ; il se lance par `jav
 
 ### Fenêtre de configuration
 
-`synoRightGui.exe` (ou `synoRight gui`) ouvre la fenêtre de configuration, avec ces sections :
+`synoRightGui.exe` (ou `synoRight gui`) ouvre la fenêtre de configuration, avec ces sections et, dans la barre du bas, la liste déroulante de la **langue** (automatique, c'est-à-dire la langue d'affichage de Windows, ou une langue fixe) :
 
 - **Connexion** : URL de DSM, compte, mot de passe (mémorisé au choix), test de connexion (demande l'OTP si besoin, propose de faire confiance à un certificat auto-signé).
 - **Dossier photos** : la racine des photos sur le partage (ex : `\\NAS\photo`).
 - **Groupes** : les groupes du NAS à gérer, choisis dans la liste des groupes du NAS, et leurs noms courts.
 - **Menu Explorateur** : entrées de chaque menu, menu à installer (Windows 11, classique ou les deux), installation / mise à jour / désinstallation.
 - **Synchronisation** : analyse des écarts, puis Fichiers → Photos ou Photos → fichiers après confirmation.
-- **Langue** : automatique (langue d'affichage de Windows) ou une langue fixe.
 
 ### Menu de l'Explorateur
 
@@ -116,7 +115,7 @@ user=admin
 # mot de passe chiffré (écrit par la fenêtre de configuration, init ou password), optionnel : demandé à la connexion sinon
 password=v2:...
 # id:nom court;id:nom court : id (gid) du groupe sur le NAS et nom court, libre (fichiers @<nom court>.synoRight, entrées du menu)
-groups=65536:Kerdudou;65537:Godmez
+groups=65536:Smith;65537:Jones
 # temps de traitement et détail des erreurs
 verbose=false
 # optionnel : empreinte SHA-256 du certificat auto-signé du NAS à accepter (proposé au test de connexion)
@@ -170,3 +169,10 @@ produit l'application autonome (runtime Java embarqué, construite par `jpackage
 ## Versions publiées et CI
 
 Le workflow GitHub Actions [`build.yml`](.github/workflows/build.yml) lance les tests (`mvn verify`) à chaque push et pull request. Pousser un tag `v*` construit l'application complète avec le menu Windows 11 et crée une pré-version en brouillon avec `synoRight-<version>-windows-x64.zip` et `synoRight-<version>.jar`. Le package du menu est signé avec le certificat fourni par les secrets `SYNORIGHT_SIGN_PFX_BASE64` et `SYNORIGHT_SIGN_PASSWORD`, sinon avec un certificat généré pour cette seule construction (les notes de version le signalent alors).
+
+Pour créer les secrets à partir d'un .pfx (par exemple synoRight.pfx produit par 
+ative\create-cert.ps1) :
+
+- `SYNORIGHT_SIGN_PFX_BASE64` : le résultat, en PowerShell, de `[Convert]::ToBase64String([IO.File]::ReadAllBytes('synoRight.pfx'))`.
+- `SYNORIGHT_SIGN_PASSWORD` : le mot de passe du .pfx. Pour un .pfx produit par 
+ative\create-cert.ps1, il est stocké protégé par DPAPI dans synoRight.pfx.pwd ; le lire, avec le même utilisateur Windows, par `[System.Net.NetworkCredential]::new('', (Get-Content synoRight.pfx.pwd | ConvertTo-SecureString)).Password`.

@@ -66,7 +66,7 @@ public class SynoRightCommand implements Callable<Integer> {
 		return 0;
 	}
 
-	static final class VersionProvider implements IVersionProvider {
+	public static final class VersionProvider implements IVersionProvider {
 		@Override
 		public String[] getVersion() {
 			final String version = SynoRightCommand.class.getPackage().getImplementationVersion();

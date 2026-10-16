@@ -107,7 +107,7 @@ final class InitCommand extends AbstractCommand {
 		}
 
 		System.out.println();
-		System.out.println("Terminé. Pour commencer : 'synoRight status' affiche l'état des droits, 'synoRight --help' liste les commandes.");
+		System.out.println("Terminé. 'synoRight status' affiche l'état des droits, 'synoRight --help' liste les commandes ; synoRightGui ouvre l'interface graphique.");
 	}
 
 	private static Preferences loadExisting(final Path dir) {

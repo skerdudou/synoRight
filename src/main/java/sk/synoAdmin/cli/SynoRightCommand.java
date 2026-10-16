@@ -26,6 +26,7 @@ import sk.synoAdmin.prefs.Preferences;
 				RightCommands.Show.class,
 				RightCommands.Grant.class,
 				RightCommands.Revoke.class,
+				RightsCommand.class,
 				ConfigCommands.Config.class,
 				ConfigCommands.Groups.class,
 				ConfigCommands.Password.class,

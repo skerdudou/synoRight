@@ -1,6 +1,7 @@
 package sk.synoAdmin.synology;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
@@ -8,9 +9,9 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import sk.synoAdmin.engine.Folder;
 
@@ -21,7 +22,7 @@ class SynoApiClientTest {
 	private static JsonNode json(final String content) {
 		try {
 			return MAPPER.readTree(content);
-		} catch (final JsonProcessingException e) {
+		} catch (final JacksonException e) {
 			throw new IllegalArgumentException(e);
 		}
 	}
@@ -98,6 +99,6 @@ class SynoApiClientTest {
 		assertTrue(SynoApiClient.describeIoError(new java.net.ConnectException()).contains("injoignable"));
 		assertTrue(SynoApiClient.describeIoError(new java.io.IOException(new java.nio.channels.UnresolvedAddressException())).contains("hôte introuvable"));
 		assertTrue(SynoApiClient.describeIoError(new javax.net.ssl.SSLHandshakeException("PKIX")).contains("certificat"));
-		assertTrue(SynoApiClient.describeIoError(new com.fasterxml.jackson.core.JsonParseException(null, "html")).contains("DSM"));
+		assertTrue(SynoApiClient.describeIoError(assertThrows(JacksonException.class, () -> MAPPER.readTree("<html>"))).contains("DSM"));
 	}
 }

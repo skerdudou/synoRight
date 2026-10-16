@@ -22,11 +22,11 @@ import java.util.stream.Collectors;
 
 import javax.net.ssl.SSLException;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 import sk.synoAdmin.ConsoleUtil;
 import sk.synoAdmin.LogUtil;
@@ -161,7 +161,7 @@ public class SynoApiClient {
 
 			if (isSuccess(response)) {
 				final JsonNode data = response.path("data");
-				session.update(data.path("sid").asText(null), data.path("synotoken").asText(null), data.path("device_id").asText(null));
+				session.update(data.path("sid").asString(null), data.path("synotoken").asString(null), data.path("device_id").asString(null));
 				initCookies();
 
 				if (initialPassword != null && !initialPassword.equals(pwd) && onPasswordCorrected != null) {
@@ -222,7 +222,7 @@ public class SynoApiClient {
 
 	// type de la première erreur d'une réponse de login (ex : "otp")
 	private static String loginErrorType(final JsonNode response) {
-		return response.path("error").path("errors").path("types").path(0).path("type").asText(null);
+		return response.path("error").path("errors").path("types").path(0).path("type").asString(null);
 	}
 
 	/**
@@ -249,7 +249,7 @@ public class SynoApiClient {
 	static List<SynoGroup> parseGroupList(final JsonNode response) {
 		final List<SynoGroup> groups = new ArrayList<>();
 		for (final JsonNode group : response.path("data").path("groups")) {
-			groups.add(new SynoGroup(group.path("gid").asInt(), group.path("name").asText()));
+			groups.add(new SynoGroup(group.path("gid").asInt(), group.path("name").asString()));
 		}
 		return groups;
 	}
@@ -304,7 +304,7 @@ public class SynoApiClient {
 			for (final JsonNode permission : folder.path("additional").path("sharing_info").path("permission")) {
 				browseGrpIds.add(permission.path("id").asInt());
 			}
-			folders.add(new SynoFolderPermission(folder.path("id").asInt(), folder.path("name").asText(), browseGrpIds));
+			folders.add(new SynoFolderPermission(folder.path("id").asInt(), folder.path("name").asString(), browseGrpIds));
 		}
 		return folders;
 	}
@@ -381,7 +381,8 @@ public class SynoApiClient {
 		try {
 			final HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
 			return MAPPER.readTree(response.body());
-		} catch (final IOException e) {
+		} catch (final IOException | JacksonException e) {
+			// JacksonException (non contrôlée depuis Jackson 3) : réponse qui n'est pas du JSON
 			throw new UserException("Erreur de communication avec le NAS (" + url + ") : " + describeIoError(e), e);
 		} catch (final IllegalArgumentException e) {
 			throw new UserException("Erreur de communication avec le NAS (" + url + ") : " + describeIoError(e), e);
@@ -410,7 +411,7 @@ public class SynoApiClient {
 			if (cause instanceof ConnectException) {
 				return "NAS injoignable, vérifier l'URL, le port et le réseau.";
 			}
-			if (cause instanceof JsonProcessingException) {
+			if (cause instanceof JacksonException) {
 				return "réponse inattendue (pas du JSON) : l'URL pointe-t-elle bien vers DSM (ex : https://nas:5001) ?";
 			}
 			cause = cause.getCause();

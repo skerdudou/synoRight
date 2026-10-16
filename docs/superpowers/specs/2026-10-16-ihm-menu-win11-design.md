@@ -182,6 +182,7 @@ Désinstallation : `Remove-AppxPackage` + suppression des clés. Déplacement de
 ## Prérequis de build
 
 - JDK 25 (jpackage), Maven.
+- Dépendances en dernière version stable (vérifié le 2026-10-16) : Jackson 3.2.3 (`tools.jackson`), picocli 4.7.7, FlatLaf 3.7.2 (nouvelle), JUnit 6.1.3 ; plugins Maven à jour.
 - Visual Studio 2022 Build Tools (charge C++), Windows 11 SDK (makeappx, signtool).
 - Certificat de signature créé par `native/create-cert.ps1`.
 

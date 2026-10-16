@@ -2,6 +2,7 @@ package sk.synoAdmin.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.EventQueue;
 import java.awt.GraphicsEnvironment;
@@ -10,9 +11,14 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -65,7 +71,11 @@ public final class Gui {
 		return result.ok() && result.output().contains("0x0");
 	}
 
-	/** Affiche la fenêtre et attend sa fermeture (dispose). */
+	/**
+	 * Affiche la fenêtre et attend sa fermeture (dispose). Les fenêtres doivent utiliser DISPOSE_ON_CLOSE
+	 * (ou appeler elles-mêmes dispose() à la fermeture), sinon l'attente ne se termine jamais.
+	 * Si l'affichage échoue, l'erreur est présentée, la fenêtre libérée et l'attente levée.
+	 */
 	public static void showAndWait(final Window window) {
 		final CountDownLatch closed = new CountDownLatch(1);
 		window.addWindowListener(new WindowAdapter() {
@@ -75,8 +85,17 @@ public final class Gui {
 			}
 		});
 		EventQueue.invokeLater(() -> {
-			window.setLocationRelativeTo(null);
-			window.setVisible(true);
+			try {
+				window.setLocationRelativeTo(null);
+				window.setVisible(true);
+			} catch (final Throwable e) {
+				try {
+					showError(null, e);
+				} finally {
+					window.dispose();
+					closed.countDown();
+				}
+			}
 		});
 		try {
 			closed.await();
@@ -86,11 +105,47 @@ public final class Gui {
 	}
 
 	/**
-	 * Exécute une tâche longue (réseau, disque) hors de l'EDT : curseur d'attente, owner désactivé
-	 * pendant l'opération, résultat ou erreur traités sur l'EDT.
+	 * Exécute le code sur l'EDT et renvoie son résultat ; une exception du code (UserException comprise)
+	 * est relancée telle quelle à l'appelant.
 	 */
+	static <T> T onEdt(final Supplier<T> code) {
+		if (EventQueue.isDispatchThread()) {
+			return code.get();
+		}
+		final AtomicReference<T> result = new AtomicReference<>();
+		try {
+			EventQueue.invokeAndWait(() -> result.set(code.get()));
+		} catch (final InvocationTargetException e) {
+			if (e.getCause() instanceof final RuntimeException cause) {
+				throw cause;
+			}
+			if (e.getCause() instanceof final Error cause) {
+				throw cause;
+			}
+			throw new RuntimeException(e.getCause());
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new UserException("Saisie annulée.");
+		}
+		return result.get();
+	}
+
+	/** Voir {@link #runAsync(Component, Supplier, Consumer, Runnable)}, sans traitement particulier de l'échec. */
 	public static <T> void runAsync(final Component owner, final Supplier<T> task, final Consumer<T> onSuccess) {
-		owner.setEnabled(false);
+		runAsync(owner, task, onSuccess, () -> {
+			// rien
+		});
+	}
+
+	/**
+	 * Exécute une tâche longue (réseau, disque) hors de l'EDT : curseur d'attente, contenu de l'owner
+	 * désactivé pendant l'opération, résultat ou erreur traités sur l'EDT. En cas d'échec, l'erreur est
+	 * affichée puis onFailure est exécuté.
+	 */
+	public static <T> void runAsync(final Component owner, final Supplier<T> task, final Consumer<T> onSuccess,
+			final Runnable onFailure) {
+		final Map<Component, Boolean> states = new IdentityHashMap<>();
+		disable(owner, states);
 		owner.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 		new SwingWorker<T, Void>() {
 			@Override
@@ -100,17 +155,41 @@ public final class Gui {
 
 			@Override
 			protected void done() {
-				owner.setEnabled(true);
+				restore(states);
 				owner.setCursor(Cursor.getDefaultCursor());
 				try {
-					onSuccess.accept(get());
+					final T result = get();
+					try {
+						onSuccess.accept(result);
+					} catch (final RuntimeException e) {
+						showError(owner, e);
+						onFailure.run();
+					}
 				} catch (final ExecutionException e) {
 					showError(owner, e.getCause());
+					onFailure.run();
+				} catch (final CancellationException e) {
+					onFailure.run();
 				} catch (final InterruptedException e) {
 					Thread.currentThread().interrupt();
 				}
 			}
 		}.execute();
+	}
+
+	/** Désactive le composant et tout son contenu (setEnabled seul ne touche pas aux enfants d'une fenêtre). */
+	private static void disable(final Component component, final Map<Component, Boolean> states) {
+		states.put(component, component.isEnabled());
+		component.setEnabled(false);
+		if (component instanceof final Container container) {
+			for (final Component child : container.getComponents()) {
+				disable(child, states);
+			}
+		}
+	}
+
+	private static void restore(final Map<Component, Boolean> states) {
+		states.forEach(Component::setEnabled);
 	}
 
 	/** Erreur prévue (UserException) : message seul ; sinon message + détail repliable. */

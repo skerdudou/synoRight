@@ -1,13 +1,9 @@
 package sk.synoAdmin.gui;
 
 import java.awt.BorderLayout;
-import java.awt.EventQueue;
 import java.awt.GridLayout;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
 
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
@@ -40,7 +36,7 @@ final class SwingInteraction implements Interaction {
 
 	@Override
 	public String promptLine(final String label, final String defaultValue) {
-		final String value = onEdt(() -> (String) JOptionPane.showInputDialog(null, label, Gui.TITLE,
+		final String value = Gui.onEdt(() -> (String) JOptionPane.showInputDialog(null, label, Gui.TITLE,
 				JOptionPane.QUESTION_MESSAGE, null, null, defaultValue));
 		if (value == null) {
 			throw new UserException(CANCELLED);
@@ -51,7 +47,7 @@ final class SwingInteraction implements Interaction {
 	@Override
 	public List<Integer> promptChoices(final String label, final List<String> items) {
 		while (true) {
-			final List<Integer> choices = onEdt(() -> {
+			final List<Integer> choices = Gui.onEdt(() -> {
 				final JPanel panel = new JPanel(new GridLayout(0, 1));
 				panel.add(new JLabel(label));
 				final List<JCheckBox> boxes = items.stream().map(JCheckBox::new).toList();
@@ -80,7 +76,7 @@ final class SwingInteraction implements Interaction {
 	public String promptSecret(final String label) {
 		while (true) {
 			final String value = readSecret(label);
-			if (!value.isEmpty()) {
+			if (!value.isBlank()) {
 				return value;
 			}
 		}
@@ -89,11 +85,11 @@ final class SwingInteraction implements Interaction {
 	@Override
 	public String promptSecretOrKeep(final String label) {
 		final String value = readSecret(label);
-		return value.isEmpty() ? null : value;
+		return value.isBlank() ? null : value;
 	}
 
 	private static String readSecret(final String label) {
-		final String value = onEdt(() -> {
+		final String value = Gui.onEdt(() -> {
 			final JPasswordField field = new JPasswordField(20);
 			final JPanel panel = new JPanel(new BorderLayout(0, 4));
 			panel.add(new JLabel(label), BorderLayout.NORTH);
@@ -120,17 +116,17 @@ final class SwingInteraction implements Interaction {
 		if (value == null) {
 			throw new UserException(CANCELLED);
 		}
-		return value.trim();
+		return value;
 	}
 
 	@Override
 	public boolean promptBool(final String label) {
-		return onEdt(() -> JOptionPane.showConfirmDialog(null, label, Gui.TITLE, JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION);
+		return Gui.onEdt(() -> JOptionPane.showConfirmDialog(null, label, Gui.TITLE, JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION);
 	}
 
 	@Override
 	public void info(final String message) {
-		onEdt(() -> {
+		Gui.onEdt(() -> {
 			JOptionPane.showMessageDialog(null, message, Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 			return null;
 		});
@@ -138,7 +134,7 @@ final class SwingInteraction implements Interaction {
 
 	@Override
 	public void error(final String message, final Throwable detail) {
-		onEdt(() -> {
+		Gui.onEdt(() -> {
 			Gui.showError(null, message, detail);
 			return null;
 		});
@@ -147,24 +143,5 @@ final class SwingInteraction implements Interaction {
 	@Override
 	public boolean isGraphical() {
 		return true;
-	}
-
-	private static <T> T onEdt(final Supplier<T> dialog) {
-		if (EventQueue.isDispatchThread()) {
-			return dialog.get();
-		}
-		final AtomicReference<T> result = new AtomicReference<>();
-		try {
-			EventQueue.invokeAndWait(() -> result.set(dialog.get()));
-		} catch (final InvocationTargetException e) {
-			if (e.getCause() instanceof final RuntimeException cause) {
-				throw cause;
-			}
-			throw new RuntimeException(e.getCause());
-		} catch (final InterruptedException e) {
-			Thread.currentThread().interrupt();
-			throw new UserException(CANCELLED);
-		}
-		return result.get();
 	}
 }

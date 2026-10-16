@@ -18,7 +18,7 @@ public final class GuiCommand extends AbstractCommand {
 	@Override
 	protected void execute() {
 		Gui.setup();
-		Gui.showAndWait(ConfigWindow.create(configDir()));
+		Gui.showAndWait(Gui.onEdt(() -> ConfigWindow.create(configDir())));
 	}
 
 	/**
@@ -34,7 +34,8 @@ public final class GuiCommand extends AbstractCommand {
 		@Override
 		protected final void execute() {
 			Gui.setup();
-			Gui.showAndWait(createWindow());
+			// construite sur l'EDT ; une UserException remonte telle quelle
+			Gui.showAndWait(Gui.onEdt(this::createWindow));
 		}
 
 		abstract java.awt.Window createWindow();

@@ -182,7 +182,8 @@ final class ConfigForm {
 			final String id = before.substring(0, before.indexOf(':'));
 			final String oldName = before.substring(before.indexOf(':') + 1);
 			groups.stream()
-					.filter(g -> g.getId().equals(id) && !g.getName().equals(oldName))
+					// casse seule : les fichiers existants restent trouvés (partage Windows insensible à la casse)
+					.filter(g -> g.getId().equals(id) && !g.getName().equalsIgnoreCase(oldName))
 					.findAny()
 					.ifPresent(g -> notes.add("Le nom court « " + oldName + " » devient « " + g.getName() + " » : les fichiers @" + oldName
 							+ ".synoRight existants ne seront plus pris en compte (« Photos → fichiers » recrée les nouveaux)."));

@@ -4,6 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -156,9 +157,11 @@ final class InitCommand extends AbstractCommand {
 		final List<String> labels = nasGroups.stream()
 				.map(g -> g.name() + (existing != null && existing.getGroupById(String.valueOf(g.gid())).isPresent() ? " (actuel)" : ""))
 				.toList();
-		return ConsoleUtil.promptChoices("Groupes à gérer", labels).stream()
-				.map(nasGroups::get)
-				.map(g -> new Group(String.valueOf(g.gid()), g.name()))
-				.toList();
+		// groupe déjà géré : son nom court (nom des fichiers de droits) est conservé
+		final List<Group> groups = new ArrayList<>();
+		for (final int index : ConsoleUtil.promptChoices("Groupes à gérer", labels)) {
+			groups.add(ConfigCommands.toGroup(nasGroups.get(index), existing, groups));
+		}
+		return groups;
 	}
 }

@@ -832,6 +832,10 @@ final class ConfigWindow {
 		}, result -> {
 			saved = result.pref();
 			form = current.afterSave(result.pref());
+			if (nasGroups != null) {
+				// nouvel instantané : les notes de renommage ne s'appliquent plus
+				refreshGroupWarnings();
+			}
 			passwordField.setText("");
 			refreshPasswordHint();
 			refreshConnectionStatus();

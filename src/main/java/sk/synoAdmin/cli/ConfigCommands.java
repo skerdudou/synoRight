@@ -117,6 +117,25 @@ final class ConfigCommands {
 		}
 	}
 
+	/**
+	 * Groupe géré pour un groupe du NAS : nom court de la configuration existante (même id) s'il y en a un,
+	 * sinon le nom du NAS ; demandé en console si ce nom n'est pas utilisable (caractère interdit, doublon).
+	 *
+	 * @param existing configuration actuelle (null : aucune)
+	 * @param chosen groupes déjà retenus (contrôle des doublons)
+	 */
+	static Group toGroup(final SynoGroup nasGroup, final Preferences existing, final List<Group> chosen) {
+		final String id = String.valueOf(nasGroup.gid());
+		String name = existing == null ? nasGroup.name() : existing.getGroupById(id).map(Group::getName).orElse(nasGroup.name());
+		String reason = GroupChecks.invalidShortName(name, chosen, id);
+		while (reason != null) {
+			System.out.println("Nom « " + name + " » inutilisable pour les fichiers de droits (" + reason + ").");
+			name = ConsoleUtil.promptLine("Nom court du groupe '" + nasGroup.name() + "' (fichiers @<nom>.synoRight) :");
+			reason = GroupChecks.invalidShortName(name, chosen, id);
+		}
+		return new Group(id, name.trim());
+	}
+
 	@Command(name = "add", description = "Ajoute des groupes, choisis parmi ceux du NAS.")
 	static final class GroupsAdd extends AbstractCommand {
 		@Override
@@ -136,8 +155,7 @@ final class ConfigCommands {
 
 			final List<Group> groups = new ArrayList<>(pref.getGroups());
 			for (final int index : ConsoleUtil.promptChoices("Groupes à ajouter", candidates.stream().map(SynoGroup::name).toList())) {
-				final SynoGroup nasGroup = candidates.get(index);
-				groups.add(new Group(String.valueOf(nasGroup.gid()), nasGroup.name()));
+				groups.add(toGroup(candidates.get(index), null, groups));
 			}
 			pref.setGroups(groups);
 			pref.save();

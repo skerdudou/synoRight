@@ -35,13 +35,25 @@ synoRight synchronise les droits d'accès des dossiers de l'**espace partagé de
 
 ## Installation
 
-1. Télécharger `synoRight-<version>-windows-x64.zip` depuis la page [Releases](https://github.com/skerdudou/synoRight/releases). Il embarque son propre runtime Java : rien d'autre à installer.
-2. Le décompresser dans par exemple `C:\Program Files` (l'archive contient un dossier `synoRight` ; écrire à cet endroit demande les droits administrateur) ou dans n'importe quel dossier. Le dossier `synoRight` contient `synoRight.exe` (ligne de commande), `synoRightGui.exe` (sans console) et, pour le menu Windows 11, `synoRightMenu.dll`, `synoRight.msix` et `synoRight.cer`.
-3. Lancer **`synoRightGui.exe`** : la fenêtre de configuration s'ouvre. Renseigner la connexion, la tester, choisir le dossier photos et les groupes, puis installer le menu de l'Explorateur.
+### Installateur (recommandé)
+
+1. Télécharger `synoRight-<version>-setup.exe` depuis la page [Releases](https://github.com/skerdudou/synoRight/releases) et le lancer. Il embarque son propre runtime Java : rien d'autre à installer.
+2. L'installation se fait **par utilisateur** : aucun droit administrateur n'est nécessaire. Elle ajoute un raccourci dans le menu Démarrer (et, en option, sur le Bureau) et s'installe dans `%LOCALAPPDATA%\Programs\synoRight`.
+3. Lancer **synoRight** : la fenêtre de configuration s'ouvre. Renseigner la connexion, la tester, choisir le dossier photos et les groupes, puis installer le menu de l'Explorateur.
 
 Le **menu Windows 11** s'installe pour l'utilisateur courant, mais la première installation sur un poste demande **une seule fois une autorisation administrateur** : Windows doit approuver le certificat `CN=synoRight` qui signe le package du menu. L'invite UAC affiche « Windows PowerShell » : elle importe `synoRight.cer` (du dossier de l'application) dans le magasin « Personnes autorisées » (TrustedPeople) de l'ordinateur. Le menu classique ne demande pas de droits administrateur.
 
-Les commandes du menu pointent vers l'application à son emplacement courant : après une mise à jour ou un déplacement du dossier, les menus sont réparés automatiquement au prochain démarrage de l'IHM (ou par `synoRight menu repair`).
+**Mise à jour** : la fenêtre de configuration signale qu'une nouvelle version est disponible et peut la télécharger et l'installer. On peut aussi lancer le nouveau setup par-dessus l'ancienne version. Les menus de l'Explorateur sont réparés automatiquement.
+
+**Désinstallation** : Paramètres Windows > Applications > synoRight. Le désinstallateur retire les menus de l'Explorateur ; la configuration est conservée.
+
+### Zip portable
+
+`synoRight-<version>-windows-x64.zip` contient la même application : le décompresser dans par exemple `C:\Program Files` (l'archive contient un dossier `synoRight` ; écrire à cet endroit demande les droits administrateur) ou dans n'importe quel dossier, puis lancer **`synoRightGui.exe`**. Le dossier `synoRight` contient `synoRight.exe` (ligne de commande), `synoRightGui.exe` (sans console) et, pour le menu Windows 11, les fichiers `synoRightMenu-<version>.dll`, `synoRight.msix` et `synoRight.cer`.
+
+Les commandes du menu pointent vers l'application à son emplacement courant : après le remplacement ou le déplacement du dossier, les menus sont réparés automatiquement au prochain démarrage de l'IHM (ou par `synoRight menu repair`).
+
+### Jar
 
 Un jar seul (`synoRight-<version>.jar`) est aussi publié ; il se lance par `java -jar synoRight-<version>.jar <commande>` (Java 25+) mais n'inclut pas le menu Windows 11.
 
@@ -184,13 +196,21 @@ produit l'application autonome (runtime Java embarqué, construite par `jpackage
 
 `mvn package -Pexe -Dnative.skip` construit l'application sans le menu Windows 11 (aucun prérequis natif) ; le menu classique reste disponible.
 
+### Construire l'installateur
+
+Le setup est construit à partir du dossier de l'application avec [Inno Setup 6](https://jrsoftware.org/isinfo.php) (après `mvn package -Pexe`), dans PowerShell depuis la racine du dépôt (des chemins relatifs seraient résolus depuis le dossier du script) :
+
+```
+ISCC.exe /DAppVersion=<version> /DSourceDir="$PWD\target\dist\synoRight" /O"$PWD\target" native\installer\synoRight.iss
+```
+
+Il produit `target\synoRight-<version>-setup.exe`.
+
 ## Versions publiées et CI
 
-Le workflow GitHub Actions [`build.yml`](.github/workflows/build.yml) lance les tests (`mvn verify`) à chaque push et pull request. Pousser un tag `v*` construit l'application complète avec le menu Windows 11 et crée une pré-version en brouillon avec `synoRight-<version>-windows-x64.zip` et `synoRight-<version>.jar`. Le package du menu est signé avec le certificat fourni par les secrets `SYNORIGHT_SIGN_PFX_BASE64` et `SYNORIGHT_SIGN_PASSWORD`, sinon avec un certificat généré pour cette seule construction (les notes de version le signalent alors).
+Le workflow GitHub Actions [`build.yml`](.github/workflows/build.yml) lance les tests (`mvn verify`) à chaque push et pull request. Pousser un tag `v*` construit l'application complète avec le menu Windows 11 et crée une version en brouillon (une pré-version quand la version contient un `-`) avec `synoRight-<version>-setup.exe`, `synoRight-<version>-windows-x64.zip` et `synoRight-<version>.jar`. Les pull requests et les lancements manuels (`workflow_dispatch`) construisent aussi l'application, l'installateur, le zip et le jar et les joignent comme artefacts du workflow, sans créer de version. Le package du menu est signé avec le certificat fourni par les secrets `SYNORIGHT_SIGN_PFX_BASE64` et `SYNORIGHT_SIGN_PASSWORD`, sinon avec un certificat généré pour cette seule construction (les notes de version le signalent alors).
 
-Pour créer les secrets à partir d'un .pfx (par exemple synoRight.pfx produit par 
-ative\create-cert.ps1) :
+Pour créer les secrets à partir d'un .pfx (par exemple synoRight.pfx produit par `native\create-cert.ps1`) :
 
 - `SYNORIGHT_SIGN_PFX_BASE64` : le résultat, en PowerShell, de `[Convert]::ToBase64String([IO.File]::ReadAllBytes('synoRight.pfx'))`.
-- `SYNORIGHT_SIGN_PASSWORD` : le mot de passe du .pfx. Pour un .pfx produit par 
-ative\create-cert.ps1, il est stocké protégé par DPAPI dans synoRight.pfx.pwd ; le lire, avec le même utilisateur Windows, par `[System.Net.NetworkCredential]::new('', (Get-Content synoRight.pfx.pwd | ConvertTo-SecureString)).Password`.
+- `SYNORIGHT_SIGN_PASSWORD` : le mot de passe du .pfx. Pour un .pfx produit par `native\create-cert.ps1`, il est stocké protégé par DPAPI dans synoRight.pfx.pwd ; le lire, avec le même utilisateur Windows, par `[System.Net.NetworkCredential]::new('', (Get-Content synoRight.pfx.pwd | ConvertTo-SecureString)).Password`.

@@ -101,6 +101,7 @@ synoRight [-c <dossierConfig>] [-v] <commande>
 | `password [--forget]` | Change (après vérification auprès du NAS) ou oublie le mot de passe mémorisé |
 | `logout` | Oublie la session Synology mémorisée (la prochaine connexion redemande l'OTP) |
 | `menu install [--modern\|--classic\|--all]` / `menu uninstall` / `menu repair` | Menu contextuel de l'Explorateur Windows |
+| `update` | Recherche une version plus récente sur GitHub |
 | `gui` | Ouvre la fenêtre de configuration (c'est ce que lance `synoRightGui.exe`) |
 
 - `<groupe>` est le nom court d'un groupe géré ; `[dossier]` vaut par défaut le répertoire courant.

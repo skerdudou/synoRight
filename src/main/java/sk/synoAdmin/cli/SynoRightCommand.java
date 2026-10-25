@@ -33,6 +33,7 @@ import sk.synoAdmin.prefs.Preferences;
 				ConfigCommands.Password.class,
 				ConfigCommands.Logout.class,
 				ConfigCommands.Menu.class,
+				UpdateCommand.class,
 				GuiCommand.class })
 public class SynoRightCommand implements Callable<Integer> {
 

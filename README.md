@@ -101,6 +101,7 @@ synoRight [-c <configFolder>] [-v] <command>
 | `password [--forget]` | Changes the stored password (verified against the NAS), or forgets it |
 | `logout` | Forgets the stored Synology session (the next login asks for the OTP again) |
 | `menu install [--modern\|--classic\|--all]` / `menu uninstall` / `menu repair` | File Explorer context menu |
+| `update` | Checks whether a newer version is available on GitHub |
 | `gui` | Opens the configuration window (what `synoRightGui.exe` runs) |
 
 - `<group>` is the short name of a managed group; `[folder]` defaults to the current directory.

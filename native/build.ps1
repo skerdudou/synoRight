@@ -1,5 +1,5 @@
 ﻿# Compile la DLL du menu Windows 11, construit et signe le package sparse synoRight.msix,
-# et dépose synoRightMenu.dll, synoRight.msix et synoRight.cer dans le dossier de l'application.
+# et dépose synoRightMenu-<version>.dll, synoRight.msix et synoRight.cer dans le dossier de l'application.
 # Fichier enregistré en UTF-8 avec BOM : PowerShell 5.1 lit sinon les accents en ANSI.
 param(
     [Parameter(Mandatory)][string]$AppDir,
@@ -37,13 +37,14 @@ $password = if ($env:SYNORIGHT_SIGN_PASSWORD) { $env:SYNORIGHT_SIGN_PASSWORD } e
 # 1. DLL
 & $msbuild (Join-Path $root 'synoRightMenu\synoRightMenu.vcxproj') /p:Configuration=Release /p:Platform=x64 /nologo /v:minimal
 if ($LASTEXITCODE) { throw 'Compilation de synoRightMenu.dll en échec.' }
-Copy-Item (Join-Path $target 'synoRightMenu.dll') $AppDir -Force
+$dllName = "synoRightMenu-$Version.dll"
+Copy-Item (Join-Path $target 'synoRightMenu.dll') (Join-Path $AppDir $dllName) -Force
 
 # 2. package sparse (manifeste et logos seulement : les fichiers de l'application restent dans AppDir)
 $package = Join-Path $target 'package'
 if (Test-Path $package) { Remove-Item $package -Recurse -Force }
 New-Item -ItemType Directory $package | Out-Null
-(Get-Content (Join-Path $root 'package\AppxManifest.xml') -Raw -Encoding UTF8).Replace('@VERSION@', $packageVersion) |
+(Get-Content (Join-Path $root 'package\AppxManifest.xml') -Raw -Encoding UTF8).Replace('@VERSION@', $packageVersion).Replace('@DLL@', $dllName) |
     Set-Content (Join-Path $package 'AppxManifest.xml') -Encoding UTF8
 Copy-Item (Join-Path $root 'package\Assets') $package -Recurse
 $msix = Join-Path $AppDir 'synoRight.msix'
@@ -56,4 +57,4 @@ if ($LASTEXITCODE) { throw 'signtool en échec.' }
 $pfxData = Get-PfxData -FilePath $pfx -Password (ConvertTo-SecureString $password -AsPlainText -Force)
 Export-Certificate -Cert $pfxData.EndEntityCertificates[0] -FilePath (Join-Path $AppDir 'synoRight.cer') | Out-Null
 
-Write-Host "Menu Windows 11 : synoRightMenu.dll, synoRight.msix ($packageVersion) et synoRight.cer dans $AppDir"
+Write-Host "Menu Windows 11 : $dllName, synoRight.msix ($packageVersion) et synoRight.cer dans $AppDir"

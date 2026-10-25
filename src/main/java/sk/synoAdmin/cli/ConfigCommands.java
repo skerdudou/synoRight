@@ -17,6 +17,7 @@ import sk.synoAdmin.engine.Group;
 import sk.synoAdmin.engine.GroupChecks;
 import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuEntry;
+import sk.synoAdmin.menu.MenuRepair;
 import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.menu.MenuTarget;
 import sk.synoAdmin.prefs.Preferences;
@@ -228,7 +229,7 @@ final class ConfigCommands {
 		}
 	}
 
-	@Command(name = "menu", subcommands = { MenuInstall.class, MenuUninstall.class })
+	@Command(name = "menu", subcommands = { MenuInstall.class, MenuUninstall.class, MenuRepairCommand.class })
 	static final class Menu extends AbstractCommand {
 		@Override
 		protected void execute() {
@@ -274,6 +275,25 @@ final class ConfigCommands {
 		protected void execute() {
 			MenuService.uninstall();
 			System.out.println(Messages.get("cli.menu.uninstalled"));
+		}
+	}
+
+	@Command(name = "repair")
+	static final class MenuRepairCommand extends AbstractCommand {
+		/**
+		 * Installateur : ne réparer que si l'application a changé depuis la dernière tentative (comme au démarrage de l'IHM),
+		 * sans noter la tentative (un échec est retenté et affiché par l'IHM relancée).
+		 */
+		@Option(names = "--if-needed", hidden = true)
+		boolean ifNeeded;
+
+		@Override
+		protected void execute() {
+			switch (MenuRepair.repair(ifNeeded ? MenuRepair.Mode.IF_NEEDED : MenuRepair.Mode.FORCED)) {
+				case REPAIRED -> System.out.println(Messages.get("cli.menu.repair.done", describe(MenuService.status())));
+				case BUSY -> System.out.println(Messages.get("cli.menu.repair.busy"));
+				case NOTHING -> System.out.println(Messages.get("cli.menu.repair.none"));
+			}
 		}
 	}
 }

@@ -75,6 +75,12 @@ class MainTest {
 	}
 
 	@Test
+	void menuRepair_aideDisponible() {
+		final CommandLine repair = Main.newCommandLine().getSubcommands().get("menu").getSubcommands().get("repair");
+		assertTrue(repair.getUsageMessage().contains("Repair the File Explorer menus after an update or a move of the application"), repair.getUsageMessage());
+	}
+
+	@Test
 	void erreurUtilisateur_routeeVersInteraction() {
 		final List<String> errors = new ArrayList<>();
 		ConsoleUtil.setInteraction(new ConsoleInteraction() {

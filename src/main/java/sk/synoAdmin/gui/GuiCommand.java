@@ -28,7 +28,7 @@ public final class GuiCommand extends AbstractCommand {
 
 	@Override
 	protected void execute() {
-		Gui.setup();
+		GuiStartup.setupGui();
 		Gui.showAndWait(Gui.onEdt(() -> ConfigWindow.create(configDir())));
 	}
 
@@ -49,7 +49,7 @@ public final class GuiCommand extends AbstractCommand {
 	abstract static class WindowCommand extends AbstractCommand {
 		@Override
 		protected final void execute() {
-			Gui.setup();
+			GuiStartup.setupGui();
 			// construite sur l'EDT ; une UserException remonte telle quelle
 			Gui.showAndWait(Gui.onEdt(this::createWindow));
 		}
@@ -128,7 +128,7 @@ public final class GuiCommand extends AbstractCommand {
 			if (all.isEmpty()) {
 				return;
 			}
-			Gui.setup();
+			GuiStartup.setupGui();
 			final Preferences pref = loadPrefs();
 			final List<String> selection = newFolders ? newFolderSelection(new RightEngine(pref), all.get()) : all.get();
 			if (!selection.isEmpty()) {
@@ -161,7 +161,7 @@ public final class GuiCommand extends AbstractCommand {
 		protected void execute() {
 			final Optional<List<String>> all = folders(folders, "grant|" + group);
 			if (all.isPresent()) {
-				Gui.setup();
+				GuiStartup.setupGui();
 				QuickActions.grant(loadPrefs(), group, all.get());
 			}
 		}
@@ -178,7 +178,7 @@ public final class GuiCommand extends AbstractCommand {
 		protected void execute() {
 			final Optional<List<String>> all = folders(folders, "revoke|" + group);
 			if (all.isPresent()) {
-				Gui.setup();
+				GuiStartup.setupGui();
 				QuickActions.revoke(loadPrefs(), group, all.get());
 			}
 		}
@@ -193,7 +193,7 @@ public final class GuiCommand extends AbstractCommand {
 		protected void execute() {
 			final Optional<List<String>> all = folders(folders, "open");
 			if (all.isPresent()) {
-				Gui.setup();
+				GuiStartup.setupGui();
 				QuickActions.open(loadPrefs(), all.get());
 			}
 		}

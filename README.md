@@ -41,7 +41,7 @@ synoRight synchronises the folder permissions of the **Synology Photos Shared Sp
 
 The **Windows 11 menu** is installed for the current user, but the first installation on a computer asks **once for administrator approval**: Windows must trust the `CN=synoRight` certificate that signs the menu package. The UAC prompt shows "Windows PowerShell": it imports `synoRight.cer` (from the application folder) into the local machine "Trusted People" store. The classic menu needs no administrator rights.
 
-The menu commands point to the application at its current location: if you move the folder, install the menu again.
+The menu commands point to the application at its current location: after an update or a move of the folder, the menus are repaired automatically the next time the GUI starts (or with `synoRight menu repair`).
 
 A plain jar (`synoRight-<version>.jar`) is also published; it runs with `java -jar synoRight-<version>.jar <command>` (Java 25+) but does not include the Windows 11 menu.
 
@@ -100,7 +100,7 @@ synoRight [-c <configFolder>] [-v] <command>
 | `groups` / `groups add` / `groups remove` | Lists / adds (among the NAS groups) / removes managed groups |
 | `password [--forget]` | Changes the stored password (verified against the NAS), or forgets it |
 | `logout` | Forgets the stored Synology session (the next login asks for the OTP again) |
-| `menu install [--modern\|--classic\|--all]` / `menu uninstall` | File Explorer context menu |
+| `menu install [--modern\|--classic\|--all]` / `menu uninstall` / `menu repair` | File Explorer context menu |
 | `gui` | Opens the configuration window (what `synoRightGui.exe` runs) |
 
 - `<group>` is the short name of a managed group; `[folder]` defaults to the current directory.

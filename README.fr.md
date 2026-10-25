@@ -41,7 +41,7 @@ synoRight synchronise les droits d'accès des dossiers de l'**espace partagé de
 
 Le **menu Windows 11** s'installe pour l'utilisateur courant, mais la première installation sur un poste demande **une seule fois une autorisation administrateur** : Windows doit approuver le certificat `CN=synoRight` qui signe le package du menu. L'invite UAC affiche « Windows PowerShell » : elle importe `synoRight.cer` (du dossier de l'application) dans le magasin « Personnes autorisées » (TrustedPeople) de l'ordinateur. Le menu classique ne demande pas de droits administrateur.
 
-Les commandes du menu pointent vers l'application à son emplacement courant : après un déplacement du dossier, réinstaller le menu.
+Les commandes du menu pointent vers l'application à son emplacement courant : après une mise à jour ou un déplacement du dossier, les menus sont réparés automatiquement au prochain démarrage de l'IHM (ou par `synoRight menu repair`).
 
 Un jar seul (`synoRight-<version>.jar`) est aussi publié ; il se lance par `java -jar synoRight-<version>.jar <commande>` (Java 25+) mais n'inclut pas le menu Windows 11.
 
@@ -100,7 +100,7 @@ synoRight [-c <dossierConfig>] [-v] <commande>
 | `groups` / `groups add` / `groups remove` | Liste / ajoute (parmi les groupes du NAS) / retire des groupes gérés |
 | `password [--forget]` | Change (après vérification auprès du NAS) ou oublie le mot de passe mémorisé |
 | `logout` | Oublie la session Synology mémorisée (la prochaine connexion redemande l'OTP) |
-| `menu install [--modern\|--classic\|--all]` / `menu uninstall` | Menu contextuel de l'Explorateur Windows |
+| `menu install [--modern\|--classic\|--all]` / `menu uninstall` / `menu repair` | Menu contextuel de l'Explorateur Windows |
 | `gui` | Ouvre la fenêtre de configuration (c'est ce que lance `synoRightGui.exe`) |
 
 - `<groupe>` est le nom court d'un groupe géré ; `[dossier]` vaut par défaut le répertoire courant.

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Package sparse (sans contenu) du menu Windows 11 : donne une identité à synoRight pour
-     déclarer la commande IExplorerCommand de synoRightMenu.dll. @VERSION@ remplacé par build.ps1. -->
+     déclarer la commande IExplorerCommand de synoRightMenu.dll. @VERSION@ et @DLL@ remplacés par build.ps1. -->
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
@@ -44,7 +44,7 @@
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="synoRight menu">
-              <com:Class Id="7B3F9E62-5C1A-4D8B-9E2F-3A6C1D4B8F10" Path="synoRightMenu.dll" ThreadingModel="STA" />
+              <com:Class Id="7B3F9E62-5C1A-4D8B-9E2F-3A6C1D4B8F10" Path="@DLL@" ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>

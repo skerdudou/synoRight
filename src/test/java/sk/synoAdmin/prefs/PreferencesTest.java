@@ -305,6 +305,22 @@ class PreferencesTest {
 		assertEquals(tempDir.toAbsolutePath().normalize(), Preferences.resolveConfigDir(tempDir));
 	}
 
+	@Test
+	void updateCheck_vraiParDefaut() throws IOException {
+		writeConfig("folder=f\nurl=u\nuser=admin\ngroups=3:famille\n");
+		assertTrue(readPrefs().isUpdateCheck());
+	}
+
+	@Test
+	void updateCheck_fauxRelu(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, "\\\\NAS\\photo", "https://nas", "admin", null, List.of(new Group("3", "famille")), false);
+		assertTrue(pref.isUpdateCheck());
+		pref.setUpdateCheck(false);
+		pref.save();
+
+		assertFalse(Preferences.fromFile(dir).isUpdateCheck());
+	}
+
 	private String lineValue(final String fileName, final String key) throws IOException {
 		return Files.readAllLines(tempDir.resolve(fileName)).stream()
 				.filter(l -> l.startsWith(key + "="))

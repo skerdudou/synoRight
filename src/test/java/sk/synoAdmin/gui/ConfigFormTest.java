@@ -54,6 +54,26 @@ class ConfigFormTest {
 	}
 
 	@Test
+	void verificationMisesAJour_modifieeEtatModifieEtEnregistree(@TempDir final Path dir) {
+		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd", List.of(new Group("3", "famille")), false);
+		final ConfigForm form = ConfigForm.from(pref);
+		assertTrue(form.updateCheck);
+		assertFalse(form.isDirty());
+
+		form.updateCheck = false;
+
+		assertTrue(form.isDirty());
+		assertFalse(form.toPreferences(dir, false).isUpdateCheck());
+
+		form.updateCheck = true;
+		assertFalse(form.isDirty());
+
+		pref.setUpdateCheck(false);
+		assertFalse(ConfigForm.from(pref).updateCheck);
+		assertTrue(ConfigForm.from(null).updateCheck);
+	}
+
+	@Test
 	void langue_reprendLaConfiguration(@TempDir final Path dir) {
 		final Preferences pref = new Preferences(dir, dir.toString(), "https://nas", "admin", "pwd", List.of(new Group("3", "famille")), false);
 		pref.setLanguageSetting("de");

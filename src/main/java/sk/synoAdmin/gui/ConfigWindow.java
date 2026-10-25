@@ -2,8 +2,10 @@ package sk.synoAdmin.gui;
 
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Desktop;
+import java.awt.Dialog;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -12,8 +14,10 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,6 +27,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -35,6 +41,7 @@ import javax.swing.DefaultListSelectionModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -42,17 +49,22 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.WindowConstants;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.text.JTextComponent;
 
+import sk.synoAdmin.AppVersion;
+import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.cli.SynoRightCommand;
 import sk.synoAdmin.engine.Group;
@@ -60,6 +72,7 @@ import sk.synoAdmin.engine.GroupChecks;
 import sk.synoAdmin.engine.SyncPlan;
 import sk.synoAdmin.i18n.Language;
 import sk.synoAdmin.i18n.Messages;
+import sk.synoAdmin.menu.Launchers;
 import sk.synoAdmin.menu.MenuEntry;
 import sk.synoAdmin.menu.MenuService;
 import sk.synoAdmin.menu.MenuTarget;
@@ -68,6 +81,9 @@ import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
 import sk.synoAdmin.synology.ConnectionCheck;
 import sk.synoAdmin.synology.SynoGroup;
+import sk.synoAdmin.update.Release;
+import sk.synoAdmin.update.UpdateChecker;
+import sk.synoAdmin.update.Updater;
 
 /**
  * Fenêtre de configuration (lanceur synoRightGui.exe) : connexion, dossier photos, groupes, menu de l'Explorateur
@@ -106,6 +122,10 @@ final class ConfigWindow {
 	}
 
 	private record Installed(String message, MenuService.Status status) {
+	}
+
+	/** Mise à jour : installeur lancé, ou erreur (null si annulée ou réussie). */
+	private record UpdateOutcome(boolean launched, RuntimeException error) {
 	}
 
 	/** Ligne de la section Groupes : groupe du NAS (id) coché ou non, et son nom court (nom des fichiers). */
@@ -151,6 +171,11 @@ final class ConfigWindow {
 	private final JLabel groupHint = new JLabel(" ");
 	private final JPanel groupBoxes = new JPanel();
 	private final List<GroupChoice> groupChoices = new ArrayList<>();
+
+	// Nouvelle version (bandeau masqué tant qu'aucune version plus récente n'est connue)
+	private final JPanel updateBanner = new JPanel(new BorderLayout(8, 0));
+	private final JLabel updateLabel = new JLabel();
+	private Release latest;
 
 	// Menu Explorateur
 	private final Map<MenuEntry, JCheckBox> modernEntryBoxes = new EnumMap<>(MenuEntry.class);
@@ -253,6 +278,7 @@ final class ConfigWindow {
 
 		final JPanel content = new JPanel(new BorderLayout(8, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+		content.add(updateBanner(), BorderLayout.NORTH);
 		content.add(sectionScroll, BorderLayout.WEST);
 		content.add(cardPanel, BorderLayout.CENTER);
 		content.add(bottomBar(), BorderLayout.SOUTH);
@@ -279,6 +305,13 @@ final class ConfigWindow {
 		left.add(new JLabel(Messages.get("gui.config.language.label")));
 		left.add(languageBox());
 		left.add(version);
+		// version de développement : pas de recherche de mise à jour
+		if (AppVersion.current().isPresent()) {
+			final JButton check = new JButton(Messages.get("update.button.check"));
+			check.putClientProperty("JButton.buttonType", "borderless");
+			check.addActionListener(e -> checkForUpdate());
+			left.add(check);
+		}
 		final JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		right.add(save);
 		right.add(close);
@@ -334,15 +367,23 @@ final class ConfigWindow {
 			}
 		}
 		loadMenuState();
+		autoCheckForUpdate();
 	}
 
-	private void close() {
+	/**
+	 * Fermeture possible : refusée pendant une tâche de la fenêtre, confirmée s'il y a des modifications non enregistrées.
+	 */
+	private boolean confirmClose() {
 		if (busy) {
 			// fermer tuerait l'opération en cours (écriture de la configuration, installation du menu…)
 			JOptionPane.showMessageDialog(frame, Messages.get("gui.busy"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
-			return;
+			return false;
 		}
-		if (form.isDirty() && !Gui.confirm(frame, Messages.get("gui.config.quitConfirm"))) {
+		return !form.isDirty() || Gui.confirm(frame, Messages.get("gui.config.quitConfirm"));
+	}
+
+	private void close() {
+		if (!confirmClose()) {
 			return;
 		}
 		pending.clear();
@@ -432,6 +473,181 @@ final class ConfigWindow {
 		} else {
 			next.run();
 		}
+	}
+
+	// ---------------------------------------------------------------- Nouvelle version
+
+	/** Bandeau « nouvelle version disponible » en haut de la fenêtre, masqué au départ. */
+	private JPanel updateBanner() {
+		final JButton install = new JButton(Messages.get("update.banner.install"));
+		install.addActionListener(e -> installUpdate());
+		final JButton notes = new JButton(Messages.get("update.banner.notes"));
+		notes.addActionListener(e -> openReleasePage(latest.pageUrl()));
+		Color accent = UIManager.getColor("Component.accentColor");
+		if (accent == null) {
+			accent = Color.GRAY;
+		}
+		updateBanner.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 4, 1, 1, accent),
+				BorderFactory.createEmptyBorder(4, 8, 4, 4)));
+		updateBanner.add(updateLabel, BorderLayout.CENTER);
+		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+		buttons.add(install);
+		buttons.add(notes);
+		updateBanner.add(buttons, BorderLayout.EAST);
+		updateBanner.setVisible(false);
+		return updateBanner;
+	}
+
+	/**
+	 * Recherche automatique à l'ouverture (réglage actif, version connue, au plus une fois par 24 h). Hors de la file de la
+	 * fenêtre : elle ne bloque ni le contenu ni la fermeture, et toute erreur est ignorée.
+	 */
+	private void autoCheckForUpdate() {
+		final Optional<String> current = AppVersion.current();
+		if (!form.updateCheck || current.isEmpty()) {
+			return;
+		}
+		new SwingWorker<Optional<Release>, Void>() {
+			@Override
+			protected Optional<Release> doInBackground() {
+				if (!UpdateChecker.dueForCheck(UpdateChecker.lastCheck(), Instant.now())) {
+					return Optional.empty();
+				}
+				final Release release = UpdateChecker.fetchLatest();
+				UpdateChecker.markChecked(Instant.now());
+				return Optional.of(release);
+			}
+
+			@Override
+			protected void done() {
+				try {
+					get().filter(r -> UpdateChecker.newer(r, current.get())).ifPresent(ConfigWindow.this::showUpdate);
+				} catch (final ExecutionException e) {
+					LogUtil.debug("Recherche de mise à jour : " + e.getCause());
+				} catch (final InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+		}.execute();
+	}
+
+	/** Bouton de la barre du bas : recherche immédiate, résultat toujours affiché (bandeau, « à jour » ou erreur). */
+	private void checkForUpdate() {
+		final String current = AppVersion.current().orElseThrow();
+		async(() -> {
+			final Release release = UpdateChecker.fetchLatest();
+			UpdateChecker.markChecked(Instant.now());
+			return release;
+		}, release -> {
+			if (UpdateChecker.newer(release, current)) {
+				showUpdate(release);
+			} else {
+				JOptionPane.showMessageDialog(frame, Messages.get("update.upToDate", current), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			}
+		}, () -> {
+			// erreur déjà affichée
+		});
+	}
+
+	private void showUpdate(final Release release) {
+		latest = release;
+		updateLabel.setText(Messages.get("update.banner.available", release.version()));
+		updateBanner.setVisible(true);
+		frame.getContentPane().revalidate();
+	}
+
+	/**
+	 * Mettre à jour : application installée par l'installeur ⇒ fermeture (comme le bouton Fermer), téléchargement avec
+	 * progression, lancement de l'installeur puis arrêt ; sinon page de la release dans le navigateur.
+	 */
+	private void installUpdate() {
+		final Release release = latest;
+		if (Updater.mode(release, UpdateChecker.installedBySetup(Launchers.appDir())) == Updater.Mode.OPEN_PAGE) {
+			openReleasePage(release.pageUrl());
+			return;
+		}
+		if (!confirmClose()) {
+			return;
+		}
+		final AtomicBoolean cancelled = new AtomicBoolean();
+		final JProgressBar bar = new JProgressBar();
+		bar.setIndeterminate(true);
+		final JButton cancel = new JButton(Messages.get("update.download.cancel"));
+		final JPanel panel = new JPanel(new BorderLayout(0, 8));
+		panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+		panel.add(new JLabel(Messages.get("update.download.progress", release.version())), BorderLayout.NORTH);
+		panel.add(bar, BorderLayout.CENTER);
+		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+		buttons.add(cancel);
+		panel.add(buttons, BorderLayout.SOUTH);
+		final JDialog dialog = new JDialog(frame, Gui.TITLE, Dialog.ModalityType.MODELESS);
+		// fermer la fenêtre de progression = annuler
+		final Runnable onCancel = () -> {
+			cancelled.set(true);
+			cancel.setEnabled(false);
+		};
+		cancel.addActionListener(e -> onCancel.run());
+		dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		dialog.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(final WindowEvent e) {
+				onCancel.run();
+			}
+		});
+		dialog.setContentPane(panel);
+		dialog.setSize(400, dialog.getPreferredSize().height);
+		dialog.setLocationRelativeTo(frame);
+		dialog.setVisible(true);
+		final Path dir = Path.of(System.getProperty("java.io.tmpdir"));
+		// la fenêtre est désactivée et ne peut être fermée pendant le téléchargement (file de la fenêtre) ;
+		// l'erreur est rendue dans le résultat pour fermer la progression avant de l'afficher
+		async(() -> {
+			try {
+				final Path setup = Updater.download(release, dir, length -> SwingUtilities.invokeLater(() -> {
+					if (length > 0 && length <= Integer.MAX_VALUE) {
+						bar.setIndeterminate(false);
+						bar.setMaximum((int) length);
+					}
+				}), read -> SwingUtilities.invokeLater(() -> bar.setValue((int) Math.min(read, Integer.MAX_VALUE))), cancelled::get);
+				try {
+					Updater.launch(setup);
+				} catch (final IOException e) {
+					throw new UserException(Messages.get("update.launch.failed", e.getMessage()), e);
+				}
+				return new UpdateOutcome(true, null);
+			} catch (final Updater.DownloadCancelledException e) {
+				return new UpdateOutcome(false, null);
+			} catch (final RuntimeException e) {
+				return new UpdateOutcome(false, e);
+			}
+		}, outcome -> {
+			dialog.dispose();
+			if (outcome.error() != null) {
+				Gui.showError(frame, outcome.error());
+			} else if (outcome.launched()) {
+				// l'installeur ferme puis relance l'application : on s'arrête sans attendre
+				pending.clear();
+				folderTimer.stop();
+				frame.dispose();
+				System.exit(0);
+			}
+			// annulation : retour à la fenêtre, sans message
+		}, dialog::dispose);
+	}
+
+	private void openReleasePage(final String url) {
+		async(() -> {
+			try {
+				Desktop.getDesktop().browse(URI.create(url));
+			} catch (final IOException | UnsupportedOperationException | IllegalArgumentException e) {
+				throw new UserException(Messages.get("update.browseFailed", e.getMessage(), url), e);
+			}
+			return null;
+		}, r -> {
+			// rien
+		}, () -> {
+			// erreur déjà affichée
+		});
 	}
 
 	// ---------------------------------------------------------------- Connexion
@@ -752,6 +968,12 @@ final class ConfigWindow {
 		final JPanel buttons = leftFlow(install, uninstall);
 		buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
 		content.add(buttons);
+		// réglage de l'application (pas de section générale) : recherche d'une nouvelle version à l'ouverture
+		final JCheckBox updateCheck = new JCheckBox(Messages.get("gui.config.updateCheck"), form.updateCheck);
+		updateCheck.addActionListener(e -> form.updateCheck = updateCheck.isSelected());
+		updateCheck.setBorder(BorderFactory.createEmptyBorder(16, 0, 0, 0));
+		updateCheck.setAlignmentX(Component.LEFT_ALIGNMENT);
+		content.add(updateCheck);
 		return section(Messages.get("gui.config.menu.title"), Messages.get("gui.config.menu.description"), content);
 	}
 

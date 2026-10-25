@@ -43,6 +43,8 @@ public class Preferences {
 	private MenuTarget menuTarget;
 	// langue de l'interface : "auto" (langue du système) ou un code de langue (en, fr, de, es, it)
 	private String languageSetting = LANGUAGE_AUTO;
+	// recherche d'une nouvelle version à l'ouverture de la fenêtre de configuration
+	private boolean updateCheck = true;
 
 	public Preferences(final Path configDir, final String nasFolder, final String url, final String user, final String password, final List<Group> groups, final boolean verbose) {
 		this(configDir, nasFolder, url, user, password, groups, verbose, Session.load(configDir));
@@ -137,6 +139,7 @@ public class Preferences {
 		final String target = prop.getProperty("menuTarget");
 		preferences.menuTarget = target == null ? null : MenuTarget.fromId(target).orElse(null);
 		preferences.languageSetting = normalizeLanguageSetting(prop.getProperty("language"));
+		preferences.updateCheck = Boolean.parseBoolean(prop.getProperty("updateCheck", "true").trim());
 
 		// migration de la session historiquement stockée dans la configuration
 		final boolean sessionInConfig = session.importFromConfig(prop);
@@ -243,12 +246,14 @@ public class Preferences {
 			prop.setProperty("menuTarget", menuTarget.id());
 		}
 		prop.setProperty("language", languageSetting);
+		prop.setProperty("updateCheck", String.valueOf(updateCheck));
 
 		try {
 			PropertiesFiles.store(configDir.resolve(CONFIG_FILENAME), prop,
 					"Configuration synoRight (groups=id:nom;id:nom, verbose=true pour les temps de traitement,"
 						+ " menuEntries.modern / menuEntries.classic=rights,status,... menuTarget=modern|classic|all,"
-							+ " language=auto|en|fr|de|es|it)");
+							+ " language=auto|en|fr|de|es|it,"
+							+ " updateCheck=false pour ne pas rechercher de nouvelle version)");
 		} catch (final IOException e) {
 			throw new RuntimeException(Messages.get("prefs.config.writeError"), e);
 		}
@@ -354,6 +359,20 @@ public class Preferences {
 	 */
 	public void setLanguageSetting(final String languageSetting) {
 		this.languageSetting = normalizeLanguageSetting(languageSetting);
+	}
+
+	/**
+	 * true si une nouvelle version est recherchée à l'ouverture de la fenêtre de configuration.
+	 */
+	public boolean isUpdateCheck() {
+		return updateCheck;
+	}
+
+	/**
+	 * Active ou non la recherche d'une nouvelle version à l'ouverture ; appeler save() pour persister.
+	 */
+	public void setUpdateCheck(final boolean updateCheck) {
+		this.updateCheck = updateCheck;
 	}
 
 	public boolean isVerbose() {

@@ -35,7 +35,7 @@ final class ConfigForm {
 	/** Valeurs comparées pour détecter les modifications non enregistrées. */
 	private record State(String url, String user, String password, boolean storePassword, String folder,
 			List<String> groups, List<MenuEntry> modernMenuEntries, List<MenuEntry> classicMenuEntries, MenuTarget menuTarget,
-			String fingerprint, String language) {
+			String fingerprint, String language, boolean updateCheck) {
 	}
 
 	String url = "";
@@ -51,6 +51,8 @@ final class ConfigForm {
 	String fingerprint;
 	/** Langue de l'interface : "auto" ou un code (en, fr, de, es, it). */
 	String language = Preferences.LANGUAGE_AUTO;
+	/** Recherche d'une nouvelle version à l'ouverture de la fenêtre. */
+	boolean updateCheck = true;
 
 	private boolean existing;
 	private State snapshot;
@@ -79,6 +81,7 @@ final class ConfigForm {
 			form.menuTarget = pref.getMenuTarget();
 			form.fingerprint = pref.getCertFingerprint();
 			form.language = pref.getLanguageSetting();
+			form.updateCheck = pref.isUpdateCheck();
 			form.existing = true;
 		}
 		form.snapshot = form.state();
@@ -218,6 +221,7 @@ final class ConfigForm {
 		pref.setMenuEntries(false, classicMenuEntries);
 		pref.setMenuTarget(menuTarget);
 		pref.setLanguageSetting(language);
+		pref.setUpdateCheck(updateCheck);
 		return pref;
 	}
 
@@ -243,6 +247,6 @@ final class ConfigForm {
 		return new State(normalizedUrl(), user, password, storePassword, folder,
 				// ordre indifférent : les cases suivent l'ordre du NAS, la configuration le sien
 				groups.stream().map(g -> g.getId() + ":" + g.getName()).sorted().toList(),
-				List.copyOf(modernMenuEntries), List.copyOf(classicMenuEntries), menuTarget, fingerprint, language);
+				List.copyOf(modernMenuEntries), List.copyOf(classicMenuEntries), menuTarget, fingerprint, language, updateCheck);
 	}
 }

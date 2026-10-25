@@ -9,6 +9,7 @@ import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
+import sk.synoAdmin.AppVersion;
 import sk.synoAdmin.gui.GuiCommand;
 import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
@@ -69,8 +70,7 @@ public class SynoRightCommand implements Callable<Integer> {
 	public static final class VersionProvider implements IVersionProvider {
 		@Override
 		public String[] getVersion() {
-			final String version = SynoRightCommand.class.getPackage().getImplementationVersion();
-			return new String[] { "synoRight " + (version == null ? Messages.get("cli.version.development") : version) };
+			return new String[] { "synoRight " + AppVersion.current().orElseGet(() -> Messages.get("cli.version.development")) };
 		}
 	}
 }

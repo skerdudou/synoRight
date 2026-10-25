@@ -32,4 +32,10 @@ class CommandLinesTest {
 	void join_espaceEntreArguments() {
 		assertEquals("-c \"D:\\a b\" rights \"%V\"", CommandLines.join(List.of("-c", "D:\\a b", "rights", "%V")));
 	}
+
+	@Test
+	void split_inverseDeJoin() {
+		final List<String> args = List.of("C:\\a b\\x.exe", "-c", "D:\\mes conf\\", "dit \"x\"", "", "%V", "a\\\\b");
+		assertEquals(args, CommandLines.split(CommandLines.join(args)));
+	}
 }

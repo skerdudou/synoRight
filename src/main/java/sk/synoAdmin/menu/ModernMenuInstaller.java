@@ -11,17 +11,21 @@ import java.security.cert.CertificateFactory;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
+import sk.synoAdmin.AppVersion;
 import sk.synoAdmin.ConsoleUtil;
+import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.MenuDefinition.MenuItem;
 
 /**
- * Menu du nouveau menu contextuel de Windows 11 : DLL synoRightMenu.dll déclarée par le
+ * Menu du nouveau menu contextuel de Windows 11 : DLL synoRightMenu-&lt;version&gt;.dll déclarée par le
  * package sparse synoRight.msix (signé par un certificat auto-signé), configurée par
  * HKCU\Software\synoRight\Menu que la DLL relit à chaque clic droit.
  */
@@ -29,8 +33,7 @@ public final class ModernMenuInstaller {
 
 	public static final String PACKAGE_NAME = "synoRight";
 	static final String MENU_KEY = "HKEY_CURRENT_USER\\Software\\synoRight\\Menu";
-	private static final String REGISTRY_ROOT = "HKCU\\Software\\synoRight";
-	static final String DLL = "synoRightMenu.dll";
+	private static final String DLL_PREFIX = "synoRightMenu";
 	static final String MSIX = "synoRight.msix";
 	static final String CER = "synoRight.cer";
 	private static final int WINDOWS_11_BUILD = 22000;
@@ -58,12 +61,50 @@ public final class ModernMenuInstaller {
 		if (appDir.isEmpty()) {
 			return new Availability(false, Messages.get("menu.install.modern.needsApp"));
 		}
-		for (final String file : List.of(DLL, MSIX, CER)) {
+		final Optional<String> version = AppVersion.current();
+		if (version.isEmpty()) {
+			return new Availability(false, Messages.get("menu.install.modern.needsApp"));
+		}
+		for (final String file : List.of(dllName(version.get()), MSIX, CER)) {
 			if (!Files.isRegularFile(appDir.get().resolve(file))) {
 				return new Availability(false, Messages.get("menu.install.modern.fileMissing", file, appDir.get()));
 			}
 		}
 		return new Availability(true, null);
+	}
+
+	/** Nom de la DLL de la version donnée : le nom change à chaque version, l'ancienne DLL pouvant rester chargée par l'Explorateur. */
+	static String dllName(final String version) {
+		return DLL_PREFIX + "-" + version + ".dll";
+	}
+
+	/** Noms de DLL du menu (synoRightMenu*.dll, casse ignorée) autres que celle de la version donnée, ancien nom sans version compris. */
+	static List<String> staleDlls(final List<String> fileNames, final String version) {
+		final String current = dllName(version);
+		return fileNames.stream()
+				.filter(name -> name.toLowerCase(Locale.ROOT).startsWith(DLL_PREFIX.toLowerCase(Locale.ROOT))
+						&& name.toLowerCase(Locale.ROOT).endsWith(".dll") && !name.equalsIgnoreCase(current))
+				.toList();
+	}
+
+	/** Supprime les anciennes DLL du dossier de l'application ; celles encore chargées par l'Explorateur sont ignorées. */
+	static void deleteStaleDlls(final Path appDir) {
+		final Optional<String> version = AppVersion.current();
+		if (version.isEmpty()) {
+			return;
+		}
+		try (Stream<Path> files = Files.list(appDir)) {
+			final List<String> names = files.map(file -> file.getFileName().toString()).toList();
+			for (final String stale : staleDlls(names, version.get())) {
+				try {
+					Files.deleteIfExists(appDir.resolve(stale));
+				} catch (final IOException e) {
+					LogUtil.debug("DLL " + stale + " non supprimée : " + e.getMessage());
+				}
+			}
+		} catch (final IOException e) {
+			LogUtil.debug("Dossier " + appDir + " illisible : " + e.getMessage());
+		}
 	}
 
 	private static int windowsBuild() {
@@ -74,29 +115,85 @@ public final class ModernMenuInstaller {
 	}
 
 	/**
-	 * Approuve le certificat, installe le package sparse puis écrit les entrées du menu.
+	 * Approuve le certificat, installe (ou met à jour sur place) le package sparse puis écrit les entrées du menu.
 	 *
 	 * @param hideInLegacyMenu true si le menu classique est aussi installé : sous Windows 11, l'entrée du package
 	 *            apparaît aussi dans « Afficher plus d'options », la DLL s'y masque pour ne pas doubler le menu classique
+	 * @return l'empreinte du certificat approuvé
 	 */
-	public static void install(final List<MenuItem> items, final Path configDir, final String photoFolder, final boolean hideInLegacyMenu) {
+	public static String install(final List<MenuItem> items, final Path configDir, final String photoFolder, final boolean hideInLegacyMenu) {
 		final Availability availability = availability();
 		if (!availability.available()) {
 			throw new UserException(Messages.get("menu.install.modern.unavailable", availability.reason()));
 		}
 		final Path appDir = Launchers.appDir().orElseThrow(ModernMenuInstaller::notInstalledApp);
-		trustCertificate(appDir.resolve(CER));
+		final String thumbprint = trustCertificate(appDir.resolve(CER));
 
-		// même version et contenu différent refusés par Add-AppxPackage : on retire l'ancien package
-		if (isInstalled()) {
+		// même version, autre dossier ou version plus récente refusés par Add-AppxPackage : on retire l'ancien package ;
+		// une version plus ancienne dans le même dossier est mise à jour sur place (le menu reste en place)
+		final PackageAction action = packageAction(installedPackage(), appDir, packageVersion(AppVersion.current().orElseThrow()));
+		if (action == PackageAction.REINSTALL) {
 			removePackage();
 		}
-		final ProcessRunner.Result added = powershell("Add-AppxPackage -Path " + psQuote(appDir.resolve(MSIX).toString())
-				+ " -ExternalLocation " + psQuote(appDir.toString()));
+		ProcessRunner.Result added = addPackage(appDir);
+		if (!added.ok() && action == PackageAction.UPGRADE) {
+			// mise à jour sur place refusée (package utilisé, par exemple par dllhost.exe) : retrait puis ajout
+			LogUtil.debug("Mise à jour du package refusée, réinstallation : " + added.output());
+			removePackage();
+			added = addPackage(appDir);
+		}
 		if (!added.ok()) {
 			throw new UserException(Messages.get("menu.install.modern.addPackageFailed", added.output()));
 		}
 		refreshEntries(items, configDir, photoFolder, hideInLegacyMenu);
+		deleteStaleDlls(appDir);
+		return thumbprint;
+	}
+
+	private static ProcessRunner.Result addPackage(final Path appDir) {
+		return powershell("Add-AppxPackage -Path " + psQuote(appDir.resolve(MSIX).toString()) + " -ExternalLocation " + psQuote(appDir.toString()));
+	}
+
+	/**
+	 * @param version version du package installé (a.b.c.d)
+	 * @param installLocation dossier externe du package sparse (le dossier de l'application)
+	 */
+	record InstalledPackage(String version, String installLocation) {
+	}
+
+	/** ADD : pas de package ; UPGRADE : mise à jour sur place ; REINSTALL : retrait puis ajout. */
+	enum PackageAction { ADD, UPGRADE, REINSTALL }
+
+	static PackageAction packageAction(final Optional<InstalledPackage> installed, final Path appDir, final String packageVersion) {
+		if (installed.isEmpty()) {
+			return PackageAction.ADD;
+		}
+		final boolean sameDir = Path.of(installed.get().installLocation()).normalize().toString()
+				.equalsIgnoreCase(appDir.normalize().toString());
+		return sameDir && AppVersion.compare(installed.get().version(), packageVersion) < 0 ? PackageAction.UPGRADE : PackageAction.REINSTALL;
+	}
+
+	/** Version de package (a.b.c.d) d'une version Maven : 0.4-SNAPSHOT devient 0.4.0.0, comme dans build.ps1. */
+	static String packageVersion(final String appVersion) {
+		final List<String> parts = new ArrayList<>(List.of(appVersion.replaceFirst("-.*$", "").split("\\.")));
+		while (parts.size() < 4) {
+			parts.add("0");
+		}
+		return String.join(".", parts);
+	}
+
+	/** Package synoRight installé pour l'utilisateur, absent si aucun ou si la lecture échoue. */
+	static Optional<InstalledPackage> installedPackage() {
+		if (!ProcessRunner.isWindows()) {
+			return Optional.empty();
+		}
+		final ProcessRunner.Result result = powershell("Get-AppxPackage -Name " + PACKAGE_NAME
+				+ " | ForEach-Object { $_.Version; $_.InstallLocation }");
+		if (!result.ok()) {
+			return Optional.empty();
+		}
+		final List<String> lines = result.output().lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
+		return lines.size() >= 2 ? Optional.of(new InstalledPackage(lines.get(0), lines.get(1))) : Optional.empty();
 	}
 
 	private static UserException notInstalledApp() {
@@ -117,9 +214,9 @@ public final class ModernMenuInstaller {
 		if (isInstalled()) {
 			removePackage();
 		}
-		// clé absente = déjà désinstallé : on ne supprime que si elle existe
-		if (ProcessRunner.run(List.of("reg", "query", REGISTRY_ROOT)).ok()) {
-			final ProcessRunner.Result deleted = ProcessRunner.run(List.of("reg", "delete", REGISTRY_ROOT, "/f"));
+		// clé absente = déjà désinstallé : on ne supprime que si elle existe (le repère d'installation est géré par MenuService)
+		if (ProcessRunner.run(List.of("reg", "query", MENU_KEY)).ok()) {
+			final ProcessRunner.Result deleted = ProcessRunner.run(List.of("reg", "delete", MENU_KEY, "/f"));
 			if (!deleted.ok()) {
 				throw new UserException(Messages.get("menu.install.modern.deleteConfigFailed", deleted.output()));
 			}
@@ -175,12 +272,12 @@ public final class ModernMenuInstaller {
 		return ProcessRunner.run(List.of("powershell", "-NoProfile", "-NonInteractive", "-Command", command));
 	}
 
-	/** Approuve le certificat du package (magasin machine TrustedPeople) : une élévation UAC la première fois. */
-	private static void trustCertificate(final Path cer) {
+	/** Approuve le certificat du package (magasin machine TrustedPeople) : une élévation UAC la première fois. Retourne son empreinte. */
+	private static String trustCertificate(final Path cer) {
 		final String thumbprint = thumbprint(cer);
 		final String check = "Test-Path " + psQuote("Cert:\\LocalMachine\\TrustedPeople\\" + thumbprint);
 		if (powershell(check).output().contains("True")) {
-			return;
+			return thumbprint;
 		}
 		ConsoleUtil.info(Messages.get("menu.install.modern.adminPrompt"));
 		final String importCommand = "Import-Certificate -FilePath " + psQuote(cer.toString()) + " -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople";
@@ -189,6 +286,7 @@ public final class ModernMenuInstaller {
 		if (!powershell(check).output().contains("True")) {
 			throw new UserException(Messages.get("menu.install.modern.certNotTrusted"));
 		}
+		return thumbprint;
 	}
 
 	// empreinte SHA-1 (thumbprint Windows) du certificat

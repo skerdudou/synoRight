@@ -23,7 +23,7 @@ Anti-objectifs : une UAC ou une fenêtre inattendue à chaque lancement ; des ac
 
 ### Repère d'installation
 
-Clé `HKCU\Software\synoRight\Install`, écrite après chaque installation ou réparation réussie de menu (`MenuService.install`, `refresh`, réparation) :
+Clé `HKCU\Software\synoRight\Install`, écrite après chaque installation ou réparation réussie de menu (`MenuService.install`, réparation). `MenuService.refresh` ne réinstalle pas le package Windows 11 : il ne met à jour que `ConfigDir` d'un repère existant (version, lanceur, empreinte et tentative gardés) et n'en crée pas :
 
 - `Version` : version de l'application (`Implementation-Version`) ;
 - `Launcher` : commande du lanceur de l'IHM (`CommandLines.join(Launchers.gui())`) ;
@@ -40,7 +40,7 @@ Clé `HKCU\Software\synoRight\Install`, écrite après chaque installation ou r�
 - la version ou le lanceur diffère de l'application courante ;
 - ou le repère est absent alors qu'un menu existe (installations antérieures à ce lot) : présence de la clé du menu classique (`Directory\shell\01SynoRight`) ou de `HKCU\Software\synoRight\Menu`. Le dossier de configuration est alors lu dans la valeur `ConfigDir` de la clé `Menu`, à défaut dans l'argument `-c` de la commande du menu classique, à défaut le dossier par défaut.
 
-Pas de réparation en développement (version inconnue).
+Pas de réparation en développement (version inconnue). Pas de réparation automatique (démarrage de l'IHM, `--if-needed`) depuis le jar quand le menu Windows 11 est configuré : le package ne peut pas être installé sans l'exe, les menus ne sont pas repointés vers cette copie (`menu repair` forcé échoue avec le message dédié).
 
 ### Réparation
 
@@ -54,7 +54,7 @@ Pas de réparation en développement (version inconnue).
 ### Déclenchement
 
 - Au démarrage de toute commande de l'IHM (`gui`, fenêtres des droits, synchro, ajout/retrait…), avant la fenêtre : coût sans réparation limité à un `reg query`. Pendant une réparation, une petite fenêtre « Mise à jour des menus de l'Explorateur… » ; une erreur s'affiche dans une boîte de dialogue, puis la commande continue.
-- `synoRight menu repair` (CLI) : réparation forcée (ignore `AttemptedVersion`), message de résultat ; sans menu installé : « aucun menu installé », code 0. Option cachée `--if-needed` pour l'installateur (ne fait rien si le repère est à jour).
+- `synoRight menu repair` (CLI) : réparation forcée (ignore `AttemptedVersion`), message de résultat ; sans menu installé : « aucun menu installé », code 0. Option cachée `--if-needed` pour l'installateur (ne fait rien si le repère est à jour ; la tentative n'est pas notée : l'installateur ignore le code de sortie, un échec est retenté et affiché par l'IHM relancée).
 - Pas de réparation automatique depuis les autres commandes CLI (scripts, appels d'outils : pas d'UAC inattendue).
 
 ### DLL au nom versionné

@@ -24,7 +24,7 @@ public final class ClassicMenuInstaller {
 	private static final String CLASSES_ROOT = "HKEY_CURRENT_USER\\Software\\Classes\\";
 	private static final String FOLDER_KEY = CLASSES_ROOT + "Directory\\shell\\01SynoRight";
 	private static final String BACKGROUND_KEY = CLASSES_ROOT + "Directory\\Background\\shell\\01SynoRight";
-	private static final String SUBMENU_KEY = CLASSES_ROOT + "Directory\\ContextMenus\\SynoRight";
+	static final String SUBMENU_KEY = CLASSES_ROOT + "Directory\\ContextMenus\\SynoRight";
 	// référence relative à HKCR (fusion HKLM/HKCU) utilisée par ExtendedSubCommandsKey
 	private static final String SUBMENU_REF = "Directory\\ContextMenus\\SynoRight";
 	// ECF_SEPARATORBEFORE

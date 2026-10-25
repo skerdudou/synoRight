@@ -5,6 +5,7 @@ on:
     branches: ['**']
     tags: ['v*']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,7 +24,8 @@ jobs:
         run: mvn -B verify
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # pull request : installateur et archives construits avant la fusion (artefacts seuls, publication réservée aux tags)
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: build
     runs-on: windows-latest
     permissions:
@@ -36,13 +38,18 @@ jobs:
           java-version: '25'
           cache: maven
 
+      # tag : la version doit correspondre au pom ; lancement manuel ou pull request : version du pom, sans publication
       - name: Version
         id: version
         shell: powershell
         run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v', ''
           $pomVersion = ([xml](Get-Content pom.xml -Raw -Encoding UTF8)).project.version
-          if ($version -ne $pomVersion) { throw "Tag $env:GITHUB_REF_NAME does not match the pom.xml version ($pomVersion)" }
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $version = $env:GITHUB_REF_NAME -replace '^v', ''
+            if ($version -ne $pomVersion) { throw "Tag $env:GITHUB_REF_NAME does not match the pom.xml version ($pomVersion)" }
+          } else {
+            $version = $pomVersion
+          }
           [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$version`n")
 
       # Windows PowerShell (as used by the Maven build): the DPAPI password file of the
@@ -77,6 +84,19 @@ jobs:
           SYNORIGHT_SIGN_PASSWORD: ${{ secrets.SYNORIGHT_SIGN_PASSWORD }}
         run: mvn -B package -Pexe -DskipTests
 
+      # Installateur Inno Setup, construit à partir de l'application jpackage
+      - name: Installer
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          choco install innosetup --no-progress -y
+          # dossier selon la version majeure d'Inno Setup installée (Inno Setup 6, 7…)
+          $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $iscc) { throw "ISCC.exe not found under ${env:ProgramFiles(x86)}\Inno Setup*" }
+          & $iscc.FullName /DAppVersion=$env:VERSION /DSourceDir="$PWD\target\dist\synoRight" /O"$PWD\release" native\installer\synoRight.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+
       # PowerShell 7: Compress-Archive writes portable (forward slash) zip entries
       - name: Package
         shell: pwsh
@@ -90,9 +110,11 @@ jobs:
           $notes = @(
             '## Installation'
             ''
-            "1. Download ``synoRight-$env:VERSION-windows-x64.zip`` and unzip it into e.g. ``C:\Program Files`` (the archive contains a ``synoRight`` folder; writing there needs administrator rights) or into any folder."
-            '2. Run `synoRightGui.exe` to configure the NAS connection, the photo folder and the groups, then install the File Explorer menu.'
+            "1. Download ``synoRight-$env:VERSION-setup.exe`` and run it: per-user install, no administrator rights; updates install over the previous version, Explorer menus are updated automatically."
+            '2. Run synoRight to configure the NAS connection, the photo folder and the groups, then install the File Explorer menu.'
             '3. The Windows 11 menu asks once for administrator approval, to trust the `CN=synoRight` certificate shipped as `synoRight.cer`.'
+            ''
+            "``synoRight-$env:VERSION-windows-x64.zip`` is the portable version: unzip it into any folder and run ``synoRightGui.exe`` (the archive contains a ``synoRight`` folder)."
             ''
             "``synoRight-$env:VERSION.jar`` is the command line alone (``java -jar``, Java 25+), without the Windows 11 menu."
           )
@@ -105,14 +127,21 @@ jobs:
           }
           [IO.File]::WriteAllLines("$PWD\release\notes.md", $notes)
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synoRight-${{ steps.version.outputs.version }}
+          path: release/*
+
       - name: GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: synoRight ${{ steps.version.outputs.version }}
           draft: true
-          prerelease: true
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           generate_release_notes: true
           body_path: release/notes.md
           files: |
+            release/synoRight-${{ steps.version.outputs.version }}-setup.exe
             release/synoRight-${{ steps.version.outputs.version }}-windows-x64.zip
             release/synoRight-${{ steps.version.outputs.version }}.jar

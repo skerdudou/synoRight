@@ -49,7 +49,7 @@ Pas de réparation en développement (version inconnue). Pas de réparation auto
 - Approbation du certificat : seulement si l'empreinte a changé (comportement actuel de `trustCertificate`).
 - Nettoyage : suppression des `synoRightMenu*.dll` du dossier de l'application autres que celle de la version courante ; un fichier verrouillé est ignoré (retenté à la réparation suivante, sinon laissé).
 - Verrou : le menu classique lance jusqu'à 15 processus à la fois ; un verrou de fichier (`%TEMP%\synoRight-repair.lock`, `tryLock`) fait qu'un seul répare, les autres continuent sans attendre.
-- Échec : `AttemptedVersion` est quand même écrit, l'erreur est montrée une fois ; `synoRight menu repair` permet de relancer.
+- Échec : `AttemptedVersion` est quand même écrit, l'erreur est montrée une fois (sauf pour l'exécution `--if-needed` de l'installateur, qui ne note pas la tentative : le prochain démarrage de l'IHM réessaie et montre l'erreur une fois) ; `synoRight menu repair` permet de relancer.
 
 ### Déclenchement
 

@@ -66,7 +66,11 @@ Clic droit sur un dossier photos (ou sur le fond d'un dossier ouvert), menu « D
 - **Ajouter / Retirer &lt;groupe&gt;** : une entrée par groupe géré ;
 - **Ouvrir dans Synology Photos** (désactivée par défaut) et **Configuration de synoRight…**.
 
+**Plusieurs dossiers** peuvent être sélectionnés à la fois. **Droits du dossier…** affiche alors un tableau avec une ligne par dossier et une case par groupe : un clic sur l'en-tête d'un groupe coche ou décoche toute la colonne, cocher un groupe sur un sous-dossier le coche aussi sur son dossier parent quand celui-ci est dans le tableau, et les cases où Synology Photos et le fichier marqueur divergent sont mises en évidence (info-bulle avec les deux états). **Ajouter / Retirer &lt;groupe&gt;** et **Ouvrir dans Synology Photos** s'appliquent à chaque dossier sélectionné ; un dossier en erreur (pas encore indexé, par exemple) n'empêche pas le traitement des autres.
+
 Remarques :
+
+- Sélection multiple avec le **menu classique** : l'Explorateur lance un processus par dossier sélectionné (15 dossiers au plus) ; le premier regroupe les dossiers des autres, ce qui ajoute environ 1,5 s avant l'ouverture de la fenêtre. Le menu Windows 11 reçoit directement toute la sélection.
 
 - Sans choix explicite, le menu Windows 11 est utilisé s'il est disponible, sinon le menu classique (`menuTarget`).
 - Sous Windows 11, l'entrée du menu Windows 11 apparaît aussi dans « Afficher plus d'options » (comportement de Windows pour les extensions de package). Avec « Les deux », elle s'y masque pour laisser la place au menu classique.
@@ -87,10 +91,10 @@ synoRight [-c <dossierConfig>] [-v] <commande>
 | `status` | Écarts entre fichiers de droits et Synology Photos, sans rien modifier |
 | `pull [-n] [-y]` | Synology Photos → fichiers : crée / supprime les fichiers `.synoRight` |
 | `push [-n] [-y]` | Fichiers → Synology Photos : applique les droits décrits par les fichiers |
-| `show [dossier]` | Droits d'un dossier côté Photos et côté fichiers |
-| `grant <groupe> [dossier]` | Donne le droit à un groupe sur un dossier (et son parent) |
-| `revoke <groupe> [dossier]` | Retire le droit d'un groupe sur un dossier |
-| `rights [dossier]` | Choix des groupes autorisés sur un dossier (invite en console) |
+| `show [dossier...]` | Droits de dossiers côté Photos et côté fichiers |
+| `grant <groupe> [dossier...]` | Donne le droit à un groupe sur des dossiers (et leur parent) |
+| `revoke <groupe> [dossier...]` | Retire le droit d'un groupe sur des dossiers |
+| `rights [dossier...]` | Choix des groupes autorisés sur chaque dossier (invite en console), puis application de l'ensemble |
 | `config` | Affiche la configuration et vérifie dossier, connexion et groupes |
 | `groups` / `groups add` / `groups remove` | Liste / ajoute (parmi les groupes du NAS) / retire des groupes gérés |
 | `password [--forget]` | Change (après vérification auprès du NAS) ou oublie le mot de passe mémorisé |

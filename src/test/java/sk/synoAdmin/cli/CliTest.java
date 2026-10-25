@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Paths;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +47,16 @@ class CliTest {
 		final RightCommands.Grant grant = (RightCommands.Grant) result.subcommand().commandSpec().userObject();
 
 		assertEquals("famille", grant.group);
-		assertEquals("\\\\NAS\\photo\\2024", grant.folder);
+		assertEquals(List.of("\\\\NAS\\photo\\2024"), grant.folders);
+	}
+
+	@Test
+	void grant_plusieursDossiers() {
+		final ParseResult result = parse(new SynoRightCommand(), "grant", "famille", "\\\\NAS\\photo\\2024", "\\\\NAS\\photo\\2025");
+		final RightCommands.Grant grant = (RightCommands.Grant) result.subcommand().commandSpec().userObject();
+
+		assertEquals("famille", grant.group);
+		assertEquals(List.of("\\\\NAS\\photo\\2024", "\\\\NAS\\photo\\2025"), grant.folders);
 	}
 
 	@Test
@@ -54,7 +64,7 @@ class CliTest {
 		final ParseResult result = parse(new SynoRightCommand(), "grant", "famille");
 		final RightCommands.Grant grant = (RightCommands.Grant) result.subcommand().commandSpec().userObject();
 
-		assertEquals(".", grant.folder);
+		assertEquals(List.of("."), grant.folders);
 	}
 
 	@Test

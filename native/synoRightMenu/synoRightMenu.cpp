@@ -174,24 +174,50 @@ bool SiteFolderPath(IUnknown* const site, std::wstring& path) {
 	return ItemPath(folder.Get(), path);
 }
 
-// premier élément sélectionné, sinon dossier courant de la fenêtre
-bool TargetPath(IShellItemArray* const items, IUnknown* const site, std::wstring& path) {
+// éléments sélectionnés (tous des chemins du système de fichiers), sinon dossier courant de la fenêtre
+bool TargetPaths(IShellItemArray* const items, IUnknown* const site, std::vector<std::wstring>& paths) {
 	DWORD count = 0;
 	if (items != nullptr && SUCCEEDED(items->GetCount(&count)) && count > 0) {
-		ComPtr<IShellItem> item;
-		return SUCCEEDED(items->GetItemAt(0, &item)) && ItemPath(item.Get(), path);
+		for (DWORD index = 0; index < count; ++index) {
+			ComPtr<IShellItem> item;
+			std::wstring path;
+			if (FAILED(items->GetItemAt(index, &item)) || !ItemPath(item.Get(), path)) {
+				return false;
+			}
+			paths.push_back(std::move(path));
+		}
+		return true;
 	}
-	return SiteFolderPath(site, path);
+	std::wstring path;
+	if (!SiteFolderPath(site, path)) {
+		return false;
+	}
+	paths.push_back(std::move(path));
+	return true;
 }
 
-// remplace %V par le dossier ; "P:\" entre guillemets : le \ final échapperait le guillemet
-std::wstring ExpandArgs(const std::wstring& args, std::wstring path) {
+// dossier entre guillemets ; "P:\" : le \ final échapperait le guillemet, il est doublé
+std::wstring QuotePath(std::wstring path) {
 	if (!path.empty() && path.back() == L'\\') {
 		path.push_back(L'\\');
 	}
+	return L"\"" + path + L"\"";
+}
+
+// remplace l'argument "%V" (toujours entre guillemets, écrit par synoRight) par les dossiers, un argument chacun
+std::wstring ExpandArgs(const std::wstring& args, const std::vector<std::wstring>& paths) {
+	std::wstring joined;
+	for (const auto& path : paths) {
+		if (!joined.empty()) {
+			joined.push_back(L' ');
+		}
+		joined += QuotePath(path);
+	}
+	constexpr wchar_t TOKEN[] = L"\"%V\"";
+	constexpr size_t TOKEN_LENGTH = ARRAYSIZE(TOKEN) - 1;
 	std::wstring result = args;
-	for (size_t pos = 0; (pos = result.find(L"%V", pos)) != std::wstring::npos; pos += path.size()) {
-		result.replace(pos, 2, path);
+	for (size_t pos = 0; (pos = result.find(TOKEN, pos)) != std::wstring::npos; pos += joined.size()) {
+		result.replace(pos, TOKEN_LENGTH, joined);
 	}
 	return result;
 }
@@ -226,11 +252,12 @@ public:
 			return S_OK;
 		}
 		try {
-			std::wstring path;
-			if (!TargetPath(items, site_.Get(), path)) {
+			std::vector<std::wstring> paths;
+			if (!TargetPaths(items, site_.Get(), paths)) {
 				return S_OK;
 			}
-			std::wstring commandLine = L"\"" + launcher_ + L"\" " + ExpandArgs(args_, path);
+			// au-delà de 32767 caractères (plusieurs centaines de dossiers), CreateProcessW échoue
+			std::wstring commandLine = L"\"" + launcher_ + L"\" " + ExpandArgs(args_, paths);
 			STARTUPINFOW startup{};
 			startup.cb = sizeof(startup);
 			PROCESS_INFORMATION process{};
@@ -358,10 +385,11 @@ public:
 			if (legacyMenu_ && ReadDword(HKEY_CURRENT_USER, MENU_KEY, L"HideInLegacyMenu") != 0) {
 				return S_OK;
 			}
+			// tous les dossiers sélectionnés doivent être sous le dossier photos
 			Config config;
-			std::wstring path;
-			if (LoadConfig(config) && TargetPath(items != nullptr ? items : selection_.Get(), site_.Get(), path)
-				&& IsUnder(path, config.photoFolder)) {
+			std::vector<std::wstring> paths;
+			if (LoadConfig(config) && TargetPaths(items != nullptr ? items : selection_.Get(), site_.Get(), paths)
+				&& std::all_of(paths.begin(), paths.end(), [&config](const std::wstring& path) { return IsUnder(path, config.photoFolder); })) {
 				*state = ECS_ENABLED;
 			}
 		} catch (...) {

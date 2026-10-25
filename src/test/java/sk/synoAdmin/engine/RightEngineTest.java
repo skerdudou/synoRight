@@ -8,7 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.AfterEach;
@@ -173,6 +176,101 @@ class RightEngineTest {
 
 		assertTrue(engine.setFolderRights(photos.resolve("a").toString(), Set.of(FAMILLE)).isEmpty());
 		assertTrue(dsm.permissionUpdates().isEmpty());
+	}
+
+	@Test
+	void folderRights_plusieursDossiers_dansLOrdreDonne() throws IOException {
+		dsm.album(null, 1, "/a", 3).album(null, 3, "/c").album(1, 2, "/a/b", 5);
+		Files.createFile(rightFile("c", AMIS));
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final List<FolderRights> rights = engine.folderRights(List.of(
+				photos.resolve("c").toString(), photos.resolve("a/b").toString(), photos.resolve("a").toString()));
+
+		assertEquals(List.of("/c", "/a/b", "/a"), rights.stream().map(FolderRights::folderName).toList());
+		assertEquals(new FolderRights.GroupRight(AMIS, false, true), rights.get(0).rights().get(1));
+		assertEquals(new FolderRights.GroupRight(AMIS, true, false), rights.get(1).rights().get(1));
+		assertEquals(new FolderRights.GroupRight(FAMILLE, true, false), rights.get(2).rights().get(0));
+	}
+
+	@Test
+	void setFolderRights_plusieursDossiers_parentDAbord() {
+		dsm.album(null, 1, "/a", 3).album(1, 2, "/a/b", 3);
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		// sous-dossier donné en premier : traité après le parent, son ajout (parent compris) n'est pas défait
+		final Map<String, Set<Group>> wanted = new LinkedHashMap<>();
+		wanted.put(photos.resolve("a/b").toString(), Set.of(AMIS));
+		wanted.put(photos.resolve("a").toString(), Set.of());
+		engine.setFolderRights(wanted);
+
+		assertEquals(List.of(
+				"{\"id\":3,\"type\":\"group\",\"list\":[{\"folder_id\":1,\"action\":\"delete\"}]}",
+				"{\"id\":3,\"type\":\"group\",\"list\":[{\"folder_id\":2,\"action\":\"delete\"}]}",
+				"{\"id\":5,\"type\":\"group\",\"list\":[{\"folder_id\":2,\"action\":\"update\",\"role\":\"download\"},{\"folder_id\":1,\"action\":\"update\",\"role\":\"download\"}]}"),
+				dsm.permissionUpdates());
+		assertTrue(Files.exists(rightFile("a", AMIS)));
+	}
+
+	@Test
+	void folderRights_dossierNonIndexe_ecarteEtSignale() {
+		dsm.album(null, 1, "/a", 3);
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final List<String> errors = new ArrayList<>();
+		final Map<String, FolderRights> rights = engine.folderRights(
+				List.of(photos.resolve("c").toString(), photos.resolve("a").toString()), errors);
+
+		assertEquals(List.of(photos.resolve("a").toString()), List.copyOf(rights.keySet()));
+		assertEquals(1, errors.size());
+		assertTrue(errors.getFirst().startsWith(photos.resolve("c").toString()), errors.getFirst());
+	}
+
+	@Test
+	void checkFolders_ecarteLesDossiersHorsPerimetre() throws IOException {
+		final Path troisiemeNiveau = Files.createDirectories(photos.resolve("a/b/c"));
+		final RightEngine engine = new RightEngine(pref);
+		final List<String> errors = new ArrayList<>();
+
+		assertEquals(List.of(photos.resolve("a").toString()),
+				engine.checkFolders(List.of(troisiemeNiveau.toString(), photos.resolve("a").toString()), errors));
+		assertEquals(1, errors.size());
+		assertThrows(UserException.class, () -> engine.checkFolders(List.of(troisiemeNiveau.toString()), new ArrayList<>()));
+	}
+
+	@Test
+	void setFolderRights_dossierDisparu_signaleSansBloquer() {
+		dsm.album(null, 1, "/a");
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final Map<String, Set<Group>> wanted = new LinkedHashMap<>();
+		wanted.put(photos.resolve("disparu").toString(), Set.of(FAMILLE));
+		wanted.put(photos.resolve("a").toString(), Set.of(FAMILLE));
+		final List<String> messages = engine.setFolderRights(wanted);
+
+		assertEquals(2, messages.size());
+		assertTrue(Files.exists(rightFile("a", FAMILLE)));
+	}
+
+	@Test
+	void setFolderRights_dossierEnErreur_lesAutresSontTraites() {
+		// /c présent sur le partage mais pas (encore) indexé
+		dsm.album(null, 1, "/a");
+
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final Map<String, Set<Group>> wanted = new LinkedHashMap<>();
+		wanted.put(photos.resolve("c").toString(), Set.of(FAMILLE));
+		wanted.put(photos.resolve("a").toString(), Set.of(FAMILLE));
+		final List<String> messages = engine.setFolderRights(wanted);
+
+		assertEquals(2, messages.size());
+		assertTrue(messages.get(0).startsWith(photos.resolve("c").toString()), messages.get(0));
+		assertTrue(Files.exists(rightFile("a", FAMILLE)));
 	}
 
 	@Test

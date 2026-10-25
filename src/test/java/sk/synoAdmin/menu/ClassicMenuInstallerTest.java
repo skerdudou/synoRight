@@ -57,8 +57,16 @@ class ClassicMenuInstallerTest {
 
 		assertTrue(content.contains("\\shell\\01rights]"));
 		assertTrue(content.contains("\"MUIVerb\"=\"Folder permissions…\""));
-		// "C:\Java\bin\javaw.exe" -jar "D:\apps\synoRight.jar" gui -c "D:\apps" rights "%V" (échappé .reg)
-		assertTrue(content.contains("@=\"C:\\\\Java\\\\bin\\\\javaw.exe -jar D:\\\\apps\\\\synoRight.jar gui -c D:\\\\apps rights \\\"%V\\\"\""));
+		// "C:\Java\bin\javaw.exe" -jar "D:\apps\synoRight.jar" gui -c "D:\apps" rights --collect "%V" (échappé .reg)
+		assertTrue(content.contains("@=\"C:\\\\Java\\\\bin\\\\javaw.exe -jar D:\\\\apps\\\\synoRight.jar gui -c D:\\\\apps rights --collect \\\"%V\\\"\""));
+	}
+
+	@Test
+	void entreeSansDossier_sansRegroupement() {
+		final String content = buildContent(List.of(MenuEntry.STATUS));
+
+		assertTrue(content.contains(" sync\""));
+		assertFalse(content.contains("--collect"));
 	}
 
 	@Test
@@ -78,7 +86,7 @@ class ClassicMenuInstallerTest {
 		final String content = buildContent(List.of(MenuEntry.GROUPS));
 
 		assertTrue(content.contains("\"MUIVerb\"=\"Add Famille Dupont\""));
-		assertTrue(content.contains(" grant \\\"Famille Dupont\\\" \\\"%V\\\"\""));
+		assertTrue(content.contains(" grant \\\"Famille Dupont\\\" --collect \\\"%V\\\"\""));
 	}
 
 	@Test

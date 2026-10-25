@@ -66,7 +66,11 @@ Right-click a photo folder (or the background of an open folder) and open the "S
 - **Add / Remove &lt;group&gt;**: one entry per managed group;
 - **Open in Synology Photos** (disabled by default) and **synoRight configuration…**.
 
+**Several folders** can be selected at once. **Folder permissions…** then shows a table with one row per folder and one checkbox per group: clicking a group header ticks or unticks the whole column, ticking a group on a subfolder also ticks it on its parent folder when the parent is in the table, and cells where Synology Photos and the marker file disagree are highlighted (tooltip with both states). **Add / Remove &lt;group&gt;** and **Open in Synology Photos** apply to every selected folder; a folder in error (e.g. not indexed yet) does not stop the others.
+
 Notes:
+
+- Multiple selection with the **classic menu**: File Explorer starts one process per selected folder (15 folders at most); the first one gathers the folders of the others, which adds about 1.5 s before the window opens. The Windows 11 menu receives the whole selection directly.
 
 - Without an explicit choice, the Windows 11 menu is used when available, otherwise the classic menu (`menuTarget`).
 - On Windows 11, the entry of the Windows 11 menu also appears under "Show more options" (Windows behaviour for packaged extensions). With "Both", it is hidden there to leave room for the classic menu.
@@ -87,10 +91,10 @@ synoRight [-c <configFolder>] [-v] <command>
 | `status` | Differences between the permission files and Synology Photos, without changing anything |
 | `pull [-n] [-y]` | Synology Photos → files: creates / deletes the `.synoRight` files |
 | `push [-n] [-y]` | Files → Synology Photos: applies the permissions described by the files |
-| `show [folder]` | Permissions of a folder on the Synology Photos side and on the files side |
-| `grant <group> [folder]` | Grants a group permission on a folder (and on its parent folder) |
-| `revoke <group> [folder]` | Removes a group's permission on a folder |
-| `rights [folder]` | Chooses the groups allowed on a folder (console prompt) |
+| `show [folder...]` | Permissions of folders on the Synology Photos side and on the files side |
+| `grant <group> [folder...]` | Grants a group permission on folders (and on their parent folder) |
+| `revoke <group> [folder...]` | Removes a group's permission on folders |
+| `rights [folder...]` | Chooses the groups allowed on each folder (console prompt), then applies everything |
 | `config` | Shows the configuration and checks the photo folder, the NAS connection and the groups |
 | `groups` / `groups add` / `groups remove` | Lists / adds (among the NAS groups) / removes managed groups |
 | `password [--forget]` | Changes the stored password (verified against the NAS), or forgets it |

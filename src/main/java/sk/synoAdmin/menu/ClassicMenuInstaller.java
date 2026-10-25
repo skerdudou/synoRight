@@ -79,6 +79,12 @@ public final class ClassicMenuInstaller {
 			final String key = SUBMENU_KEY + "\\shell\\" + item.key();
 			final List<String> args = new ArrayList<>(base);
 			args.addAll(item.args());
+			final int path = args.indexOf(MenuDefinition.PATH);
+			if (path >= 0) {
+				// sélection multiple : un processus par dossier, regroupés par le premier (SelectionCollector) ;
+				// avant "%V", qui reste le dernier argument : "P:\" absorberait l'argument suivant
+				args.add(path, "--collect");
+			}
 			if (item.separatorBefore()) {
 				appendKey(reg, key, "\"MUIVerb\"=\"" + escape(item.title()) + "\"", SEPARATOR_BEFORE_FLAGS);
 			} else {

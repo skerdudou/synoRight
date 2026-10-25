@@ -2,6 +2,7 @@ package sk.synoAdmin.gui;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.swing.table.AbstractTableModel;
@@ -13,14 +14,19 @@ import sk.synoAdmin.i18n.Messages;
 /**
  * Modèle du tableau des droits d'un dossier : case « Autorisé » éditable, état Photos et fichier en lecture seule.
  */
-final class FolderRightsTableModel extends AbstractTableModel {
+final class FolderRightsTableModel extends AbstractTableModel implements RightsTableModel {
 
 	private static final int COLUMN_COUNT = 4;
 
+	private final String folder;
 	private final List<FolderRights.GroupRight> rights;
 	private final boolean[] wanted;
 
-	FolderRightsTableModel(final FolderRights folderRights) {
+	/**
+	 * @param folder chemin du dossier tel que reçu
+	 */
+	FolderRightsTableModel(final String folder, final FolderRights folderRights) {
+		this.folder = folder;
 		this.rights = folderRights.rights();
 		this.wanted = new boolean[rights.size()];
 		for (int i = 0; i < wanted.length; i++) {
@@ -102,8 +108,23 @@ final class FolderRightsTableModel extends AbstractTableModel {
 		return false;
 	}
 
-	/** Modification de case, ou groupe dont la cible ne correspond pas aux deux côtés (écart à corriger). */
-	boolean hasPendingChanges() {
+	@Override
+	public Map<String, Set<Group>> wanted() {
+		return Map.of(folder, wantedGroups());
+	}
+
+	@Override
+	public boolean hasGap(final int row, final int column) {
+		return hasGap(row);
+	}
+
+	@Override
+	public String toolTip(final int row, final int column) {
+		return null;
+	}
+
+	@Override
+	public boolean hasPendingChanges() {
 		for (int i = 0; i < wanted.length; i++) {
 			final FolderRights.GroupRight right = rights.get(i);
 			if (wanted[i] != right.inPhotos() || wanted[i] != right.inFile()) {

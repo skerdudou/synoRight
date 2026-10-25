@@ -1,10 +1,14 @@
 package sk.synoAdmin.gui;
 
+import java.util.List;
+import java.util.Optional;
+
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 import sk.synoAdmin.cli.AbstractCommand;
 import sk.synoAdmin.engine.SyncPlan;
+import sk.synoAdmin.menu.SelectionCollector;
 
 /**
  * Sous-commande 'gui' (lanceur synoRightGui.exe et menu contextuel) : fenêtres Swing.
@@ -29,6 +33,11 @@ public final class GuiCommand extends AbstractCommand {
 		return folder.endsWith("\"") ? folder.substring(0, folder.length() - 1) + "\\" : folder;
 	}
 
+	/** Dossiers reçus, rétablis et sans doublon, dans l'ordre. */
+	static List<String> normalizeFolderArgs(final List<String> folders) {
+		return folders.stream().map(GuiCommand::normalizeFolderArg).distinct().toList();
+	}
+
 	/** Sous-commande ouvrant une fenêtre et attendant sa fermeture. */
 	abstract static class WindowCommand extends AbstractCommand {
 		@Override
@@ -41,6 +50,27 @@ public final class GuiCommand extends AbstractCommand {
 		abstract java.awt.Window createWindow();
 	}
 
+	/**
+	 * Sous-commande portant sur les dossiers sélectionnés dans l'Explorateur. Avec --collect (menu classique,
+	 * un processus par dossier), les dossiers des différents processus sont regroupés dans un seul.
+	 */
+	abstract static class FolderCommand extends AbstractCommand {
+		@Option(names = "--collect", hidden = true)
+		boolean collect;
+
+		/**
+		 * @param action identifie l'action, pour ne regrouper que les sélections de la même entrée de menu
+		 * @return dossiers à traiter, vide s'ils ont été remis à un autre processus
+		 */
+		Optional<List<String>> folders(final List<String> args, final String action) {
+			final List<String> folders = normalizeFolderArgs(args);
+			if (!collect) {
+				return Optional.of(folders);
+			}
+			return SelectionCollector.collect(configDir().toAbsolutePath() + "|" + action, folders).map(GuiCommand::normalizeFolderArgs);
+		}
+	}
+
 	@Command(name = "config")
 	static final class Config extends WindowCommand {
 		@Override
@@ -50,13 +80,17 @@ public final class GuiCommand extends AbstractCommand {
 	}
 
 	@Command(name = "rights")
-	static final class Rights extends WindowCommand {
-		@Parameters(index = "0", paramLabel = "<folder>")
-		String folder;
+	static final class Rights extends FolderCommand {
+		@Parameters(index = "0..*", arity = "1..*", paramLabel = "<folder>")
+		List<String> folders;
 
 		@Override
-		java.awt.Window createWindow() {
-			return RightsWindow.create(loadPrefs(), normalizeFolderArg(folder));
+		protected void execute() {
+			final Optional<List<String>> all = folders(folders, "rights");
+			if (all.isPresent()) {
+				Gui.setup();
+				Gui.showAndWait(Gui.onEdt(() -> RightsWindow.create(loadPrefs(), all.get())));
+			}
 		}
 	}
 
@@ -74,42 +108,51 @@ public final class GuiCommand extends AbstractCommand {
 	}
 
 	@Command(name = "grant")
-	static final class Grant extends AbstractCommand {
+	static final class Grant extends FolderCommand {
 		@Parameters(index = "0", paramLabel = "<group>")
 		String group;
-		@Parameters(index = "1", paramLabel = "<folder>")
-		String folder;
+		@Parameters(index = "1..*", arity = "1..*", paramLabel = "<folder>")
+		List<String> folders;
 
 		@Override
 		protected void execute() {
-			Gui.setup();
-			QuickActions.grant(loadPrefs(), group, normalizeFolderArg(folder));
+			final Optional<List<String>> all = folders(folders, "grant|" + group);
+			if (all.isPresent()) {
+				Gui.setup();
+				QuickActions.grant(loadPrefs(), group, all.get());
+			}
 		}
 	}
 
 	@Command(name = "revoke")
-	static final class Revoke extends AbstractCommand {
+	static final class Revoke extends FolderCommand {
 		@Parameters(index = "0", paramLabel = "<group>")
 		String group;
-		@Parameters(index = "1", paramLabel = "<folder>")
-		String folder;
+		@Parameters(index = "1..*", arity = "1..*", paramLabel = "<folder>")
+		List<String> folders;
 
 		@Override
 		protected void execute() {
-			Gui.setup();
-			QuickActions.revoke(loadPrefs(), group, normalizeFolderArg(folder));
+			final Optional<List<String>> all = folders(folders, "revoke|" + group);
+			if (all.isPresent()) {
+				Gui.setup();
+				QuickActions.revoke(loadPrefs(), group, all.get());
+			}
 		}
 	}
 
 	@Command(name = "open")
-	static final class Open extends AbstractCommand {
-		@Parameters(index = "0", paramLabel = "<folder>")
-		String folder;
+	static final class Open extends FolderCommand {
+		@Parameters(index = "0..*", arity = "1..*", paramLabel = "<folder>")
+		List<String> folders;
 
 		@Override
 		protected void execute() {
-			Gui.setup();
-			QuickActions.open(loadPrefs(), normalizeFolderArg(folder));
+			final Optional<List<String>> all = folders(folders, "open");
+			if (all.isPresent()) {
+				Gui.setup();
+				QuickActions.open(loadPrefs(), all.get());
+			}
 		}
 	}
 }

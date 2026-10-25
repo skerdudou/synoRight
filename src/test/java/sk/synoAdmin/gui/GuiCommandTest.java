@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Paths;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +29,32 @@ class GuiCommandTest {
 
 		assertEquals(Paths.get("D:\\conf"), root.configDir());
 		assertEquals("rights", result.subcommand().subcommand().commandSpec().name());
+	}
+
+	@Test
+	void rights_plusieursDossiersEtRegroupement() {
+		final ParseResult result = new CommandLine(new SynoRightCommand())
+				.parseArgs("gui", "rights", "P:\\photo\\a", "P:\\photo\\b", "--collect");
+		final GuiCommand.Rights rights = (GuiCommand.Rights) result.subcommand().subcommand().commandSpec().userObject();
+
+		assertEquals(List.of("P:\\photo\\a", "P:\\photo\\b"), rights.folders);
+		assertTrue(rights.collect);
+	}
+
+	@Test
+	void grant_groupePuisDossiers() {
+		final ParseResult result = new CommandLine(new SynoRightCommand())
+				.parseArgs("gui", "grant", "famille", "P:\\photo\\a", "P:\"");
+		final GuiCommand.Grant grant = (GuiCommand.Grant) result.subcommand().subcommand().commandSpec().userObject();
+
+		assertEquals("famille", grant.group);
+		assertFalse(grant.collect);
+		assertEquals(List.of("P:\\photo\\a", "P:\\"), GuiCommand.normalizeFolderArgs(grant.folders));
+	}
+
+	@Test
+	void normalizeFolderArgs_sansDoublon() {
+		assertEquals(List.of("P:\\a", "P:\\b"), GuiCommand.normalizeFolderArgs(List.of("P:\\a", "P:\\b", "P:\\a")));
 	}
 
 	@Test

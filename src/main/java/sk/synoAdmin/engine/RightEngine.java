@@ -7,6 +7,8 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Function;
 
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
@@ -259,7 +262,63 @@ public class RightEngine {
 	}
 
 	public FolderRights folderRights(final String folder) {
-		final Folder resolved = resolveFolder(folder);
+		return folderRights(resolveFolder(folder, synoClient::listFolderPermissions));
+	}
+
+	/**
+	 * Droits de plusieurs dossiers, dans l'ordre donné ; chaque liste de dossiers Synology Photos
+	 * (racine, sous-dossiers d'un parent) n'est lue qu'une fois.
+	 */
+	public List<FolderRights> folderRights(final List<String> folderList) {
+		final List<String> errors = new ArrayList<>();
+		final Map<String, FolderRights> rights = folderRights(folderList, errors);
+		if (!errors.isEmpty()) {
+			throw new UserException(String.join("\n", errors));
+		}
+		return List.copyOf(rights.values());
+	}
+
+	/**
+	 * Droits des dossiers lisibles, par dossier (chemin tel que reçu), dans l'ordre donné ; un dossier en erreur
+	 * (hors du dossier photos, non indexé...) est ignoré et son erreur ajoutée à errors.
+	 */
+	public Map<String, FolderRights> folderRights(final List<String> folderList, final List<String> errors) {
+		// HashMap : clé null acceptée pour la racine
+		final Map<Integer, List<SynoFolderPermission>> listings = new HashMap<>();
+		final Map<String, FolderRights> rights = new LinkedHashMap<>();
+		for (final String folder : folderList) {
+			try {
+				rights.put(folder, folderRights(resolveFolder(folder, id -> listings.computeIfAbsent(id, synoClient::listFolderPermissions))));
+			} catch (final UserException e) {
+				errors.add(Messages.get("engine.folder.error", folder, e.getMessage()));
+			}
+		}
+		return rights;
+	}
+
+	/**
+	 * Dossiers gérables (voir {@link #checkFolder(String)}), vérifiés sans connexion ; les erreurs des autres sont
+	 * ajoutées à errors. Aucun dossier gérable : erreur du premier.
+	 */
+	public List<String> checkFolders(final List<String> folderList, final List<String> errors) {
+		final List<String> valid = new ArrayList<>();
+		UserException first = null;
+		for (final String folder : folderList) {
+			try {
+				checkFolder(folder);
+				valid.add(folder);
+			} catch (final UserException e) {
+				first = first == null ? e : first;
+				errors.add(Messages.get("engine.folder.error", folder, e.getMessage()));
+			}
+		}
+		if (valid.isEmpty() && first != null) {
+			throw first;
+		}
+		return valid;
+	}
+
+	private FolderRights folderRights(final Folder resolved) {
 		final List<FolderRights.GroupRight> rights = pref.getGroups().stream()
 				.map(g -> new FolderRights.GroupRight(g, resolved.getDbGroups().contains(g), resolved.getFsGroups().contains(g)))
 				.toList();
@@ -281,6 +340,37 @@ public class RightEngine {
 				messages.add(addRight(resolved, group));
 			} else if (!wanted.contains(group) && (inDb || inFs)) {
 				messages.add(removeRight(resolved, group));
+			}
+		}
+		return messages;
+	}
+
+	/**
+	 * Applique les groupes voulus sur plusieurs dossiers, dossiers de premier niveau d'abord : un ajout
+	 * sur un sous-dossier, qui donne aussi le droit au parent, n'est pas défait par le traitement du parent.
+	 * Un dossier en erreur (non indexé...) n'empêche pas le traitement des autres.
+	 *
+	 * @return description des modifications effectuées et des erreurs, dossier par dossier
+	 */
+	public List<String> setFolderRights(final Map<String, Set<Group>> wantedByFolder) {
+		final List<String> ordered = wantedByFolder.keySet().stream()
+				// profondeur sans accès disque : un dossier disparu est signalé par forEachFolder, pas par le tri
+				.sorted(Comparator.comparingInt(f -> Paths.get(f).toAbsolutePath().normalize().getNameCount()))
+				.toList();
+		return forEachFolder(ordered, f -> setFolderRights(f, wantedByFolder.get(f)));
+	}
+
+	/**
+	 * Exécute l'action sur chaque dossier, dans l'ordre ; une erreur prévue sur un dossier est ajoutée
+	 * aux messages (préfixée du dossier) sans empêcher le traitement des suivants.
+	 */
+	public static List<String> forEachFolder(final List<String> folderList, final Function<String, List<String>> action) {
+		final List<String> messages = new ArrayList<>();
+		for (final String folder : folderList) {
+			try {
+				messages.addAll(action.apply(folder));
+			} catch (final UserException e) {
+				messages.add(Messages.get("engine.folder.error", folder, e.getMessage()));
 			}
 		}
 		return messages;
@@ -317,6 +407,13 @@ public class RightEngine {
 	}
 
 	private Folder resolveFolder(final String folder) {
+		return resolveFolder(folder, synoClient::listFolderPermissions);
+	}
+
+	/**
+	 * @param lister liste des dossiers Synology Photos sous un parent (null : racine)
+	 */
+	private Folder resolveFolder(final String folder, final Function<Integer, List<SynoFolderPermission>> lister) {
 		final Path nasPath = Paths.get(pref.getNasFolder()).toAbsolutePath().normalize();
 		final Path relativePath = checkFolder(folder);
 
@@ -330,7 +427,7 @@ public class RightEngine {
 			folders.add(newFolder);
 			// Récupération des droits Synology à ce niveau
 			boolean found = false;
-			for (final var perm : synoClient.listFolderPermissions(parentId)) {
+			for (final var perm : lister.apply(parentId)) {
 				if (perm.name().equals(newFolder.getName())) {
 					updateDbInfos(newFolder, perm);
 					parentId = perm.id();

@@ -1,5 +1,7 @@
 package sk.synoAdmin.cli;
 
+import java.util.List;
+
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -67,15 +69,15 @@ final class RightCommands {
 
 	@Command(name = "show")
 	static final class Show extends AbstractCommand {
-		@Parameters(index = "0", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
-		String folder;
+		@Parameters(index = "0..*", arity = "0..*", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
+		List<String> folders;
 
 		@Override
 		protected void execute() {
 			final RightEngine re = new RightEngine(loadPrefs());
-			re.checkFolder(folder); // avant toute connexion
+			folders.forEach(re::checkFolder); // avant toute connexion
 			re.login();
-			RightReports.printFolder(re.folderRights(folder));
+			re.folderRights(folders).forEach(RightReports::printFolder);
 		}
 	}
 
@@ -84,17 +86,17 @@ final class RightCommands {
 		@Parameters(index = "0", paramLabel = "<group>", descriptionKey = "cli.param.group")
 		String group;
 
-		@Parameters(index = "1", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
-		String folder;
+		@Parameters(index = "1..*", arity = "0..*", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
+		List<String> folders;
 
 		@Override
 		protected void execute() {
 			final Preferences pref = loadPrefs();
 			final Group grp = pref.getGroupByName(group); // vérifié avant toute connexion
 			final RightEngine re = new RightEngine(pref);
-			re.checkFolder(folder); // avant toute connexion
+			folders.forEach(re::checkFolder); // avant toute connexion
 			re.login();
-			LogUtil.runMonitored(() -> System.out.println(re.addRightToFolder(folder, grp)),"Action time");
+			LogUtil.runMonitored(() -> folders.forEach(f -> System.out.println(re.addRightToFolder(f, grp))), "Action time");
 		}
 	}
 
@@ -103,17 +105,17 @@ final class RightCommands {
 		@Parameters(index = "0", paramLabel = "<group>", descriptionKey = "cli.param.group")
 		String group;
 
-		@Parameters(index = "1", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
-		String folder;
+		@Parameters(index = "1..*", arity = "0..*", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
+		List<String> folders;
 
 		@Override
 		protected void execute() {
 			final Preferences pref = loadPrefs();
 			final Group grp = pref.getGroupByName(group); // vérifié avant toute connexion
 			final RightEngine re = new RightEngine(pref);
-			re.checkFolder(folder); // avant toute connexion
+			folders.forEach(re::checkFolder); // avant toute connexion
 			re.login();
-			LogUtil.runMonitored(() -> System.out.println(re.removeRightToFolder(folder, grp)),"Action time");
+			LogUtil.runMonitored(() -> folders.forEach(f -> System.out.println(re.removeRightToFolder(f, grp))), "Action time");
 		}
 	}
 }

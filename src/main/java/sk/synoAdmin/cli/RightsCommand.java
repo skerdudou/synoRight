@@ -1,7 +1,9 @@
 package sk.synoAdmin.cli;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -17,23 +19,39 @@ import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.prefs.Preferences;
 
 /**
- * Commande « rights » : choisit les groupes autorisés sur un dossier.
+ * Commande « rights » : choisit les groupes autorisés sur un ou plusieurs dossiers.
  */
 @Command(name = "rights")
 public final class RightsCommand extends AbstractCommand {
 
-	@Parameters(index = "0", arity = "0..1", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
-	String folder;
+	@Parameters(index = "0..*", arity = "0..*", paramLabel = "<folder>", defaultValue = ".", descriptionKey = "cli.param.folder")
+	List<String> folders;
 
 	@Override
 	protected void execute() {
 		final Preferences pref = loadPrefs();
 		final RightEngine re = new RightEngine(pref);
-		re.checkFolder(folder);
+		folders.forEach(re::checkFolder);
 		re.login();
-		final FolderRights rights = re.folderRights(folder);
-		RightReports.printFolder(rights);
+		final List<String> distinct = folders.stream().distinct().toList();
+		final List<FolderRights> allRights = re.folderRights(distinct);
 
+		// une saisie par dossier, application de l'ensemble à la fin
+		final Map<String, Set<Group>> wanted = new LinkedHashMap<>();
+		for (int f = 0; f < distinct.size(); f++) {
+			wanted.put(distinct.get(f), promptGroups(allRights.get(f)));
+		}
+
+		// moteur neuf : il accumule les dossiers résolus
+		final RightEngine applyEngine = new RightEngine(pref);
+		applyEngine.login();
+		final List<String> messages = applyEngine.setFolderRights(wanted);
+		System.out.println(messages.isEmpty() ? Messages.get("cli.rights.none") : String.join(System.lineSeparator(), messages));
+	}
+
+	/** Affiche les droits du dossier et demande les groupes autorisés (Entrée : état actuel de Photos). */
+	private static Set<Group> promptGroups(final FolderRights rights) {
+		RightReports.printFolder(rights);
 		final List<FolderRights.GroupRight> list = rights.rights();
 		for (int i = 0; i < list.size(); i++) {
 			System.out.println("  " + (i + 1) + ") " + list.get(i).group().getName());
@@ -45,13 +63,7 @@ public final class RightsCommand extends AbstractCommand {
 			selection = parseSelection(ConsoleUtil.promptLine(Messages.get("cli.rights.prompt"),
 					current.isEmpty() ? "0" : current), list.size());
 		} while (selection.isEmpty());
-
-		final Set<Group> wanted = selection.get().stream().map(i -> list.get(i).group()).collect(Collectors.toSet());
-		// moteur neuf : il accumule les dossiers résolus
-		final RightEngine applyEngine = new RightEngine(pref);
-		applyEngine.login();
-		final List<String> messages = applyEngine.setFolderRights(folder, wanted);
-		System.out.println(messages.isEmpty() ? Messages.get("cli.rights.none") : String.join(System.lineSeparator(), messages));
+		return selection.get().stream().map(i -> list.get(i).group()).collect(Collectors.toSet());
 	}
 
 	/** Numéros (base 1, 0 ignoré) séparés par virgule/point-virgule/espace, convertis en indices ; vide si invalide. */

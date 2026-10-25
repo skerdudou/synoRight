@@ -33,3 +33,17 @@ Pouvoir sélectionner plusieurs dossiers dans l'Explorateur et lancer les action
 - Menu « Envoyer vers » (une seule ligne de commande avec tous les fichiers) : hors du sous-menu synoRight, une entrée par action.
 - `MultiSelectModel=Player` pour dépasser 15 dossiers dans le menu classique : un processus Java par dossier reste coûteux ; le menu Windows 11 n'a pas cette limite.
 - Fichier d'arguments `@fichier` de picocli depuis la DLL : échappement des chemins Windows délicat, pas nécessaire en dessous de plusieurs centaines de dossiers.
+
+## Dossiers créés par un autre outil (copybot)
+
+Demande : après une copie, copybot lance synoRight sur tous les dossiers créés (tous niveaux, parents d'abord) et la fenêtre des droits doit s'ouvrir, quitte à attendre que Synology Photos connaisse les dossiers.
+
+- `gui rights --new-folders [--wait-index <minutes>] <dossier>...` (options cachées, pour les appels d'outils) :
+  - filtrage : 3e niveau et plus écartés sans message (ils suivent leur parent), doublons retirés (même dossier écrit différemment) ; plus rien : pas de fenêtre, code 0. Dossiers hors du dossier photos ou absents : s'ils sont tous dans ce cas, erreur explicite (chemins écrits autrement que la configuration, lecteur réseau non reconnu) plutôt qu'une fin muette ; sinon, détail en mode verbeux ;
+  - attente de l'indexation : les dossiers « pas encore indexés » (`NotIndexedException`) sont réessayés toutes les 10 s, 10 min par défaut ; une autre erreur du NAS (passagère ou durable : session, accès refusé) n'a droit qu'à 2 nouveaux essais, pour ne pas faire attendre 10 min une erreur de configuration ; titre de la fenêtre « En attente de l'indexation des dossiers par Synology Photos… (n en attente) », Fermer annule ; à l'échéance, les dossiers lus sont affichés et les autres signalés.
+- Lecteur réseau : `Z:\...` est ramené au chemin UNC du partage (`HKCU\Network\Z\RemotePath`, connexions mémorisées) avant comparaison avec le dossier photos, dans les deux sens.
+- Pas de déclenchement de l'indexation par l'API : non trouvé de méthode fiable dans `SYNO.FotoTeam` ; Synology Photos indexe les nouveaux dossiers de lui-même.
+
+## Attente de l'indexation partout
+
+Demande de Steven : « Droits du dossier » attend l'indexation dans tous les cas (menus de l'Explorateur, `gui rights` avec ou sans `--new-folders`, un ou plusieurs dossiers), avec la même fenêtre d'attente. `--wait-index` (10 min par défaut, 0 = aucune) vaut pour tous ; `--new-folders` ne garde que le filtrage propre aux appels d'outils (3e niveau, hors du dossier photos, doublons, pas de fenêtre si rien).

@@ -71,6 +71,7 @@ Clic droit sur un dossier photos (ou sur le fond d'un dossier ouvert), menu « D
 Remarques :
 
 - Sélection multiple avec le **menu classique** : l'Explorateur lance un processus par dossier sélectionné (15 dossiers au plus) ; le premier regroupe les dossiers des autres, ce qui ajoute environ 1,5 s avant l'ouverture de la fenêtre. Le menu Windows 11 reçoit directement toute la sélection.
+- **Droits du dossier…** attend les dossiers pas encore indexés par Synology Photos (tout juste copiés, par exemple) : la fenêtre affiche « En attente de l'indexation des dossiers par Synology Photos… » et réessaie toutes les 10 secondes, 10 minutes au plus (une autre erreur du NAS n'est réessayée que deux fois, pour qu'une erreur durable comme un accès refusé s'affiche vite). Fermer la fenêtre annule l'attente. Les dossiers toujours inconnus à la fin sont signalés, les autres affichés.
 
 - Sans choix explicite, le menu Windows 11 est utilisé s'il est disponible, sinon le menu classique (`menuTarget`).
 - Sous Windows 11, l'entrée du menu Windows 11 apparaît aussi dans « Afficher plus d'options » (comportement de Windows pour les extensions de package). Avec « Les deux », elle s'y masque pour laisser la place au menu classique.
@@ -107,6 +108,18 @@ synoRight [-c <dossierConfig>] [-v] <commande>
 - Options communes : `-c` / `--config` répertoire de configuration, `-v` / `--verbose` temps de traitement et détail des erreurs, `-h` / `--help` aide (aussi par commande : `synoRight pull -h`), `-V` / `--version` version.
 
 Relancer `init` sur une configuration existante propose les valeurs actuelles, mot de passe compris (Entrée pour les conserver). La session mémorisée n'est remplacée qu'à l'enregistrement : abandonner l'assistant ne change rien.
+
+### Dossiers créés par un autre outil
+
+Un outil de copie ou d'import peut ouvrir la fenêtre des droits sur les dossiers qu'il vient de créer :
+
+```
+synoRightGui.exe -c <dossierConfig> rights --new-folders [--wait-index <minutes>] <dossier>...
+```
+
+- Tous les dossiers créés peuvent être passés, niveaux mélangés : seuls les dossiers de niveau 1 et 2 sous le dossier photos sont gardés, les plus profonds sont ignorés sans message (ils suivent leur parent), les doublons retirés. Plus rien : pas de fenêtre, code de sortie 0. Si aucun dossier n'est sous le dossier photos (chemin écrit autrement que dans la configuration, lecteur réseau non reconnu), une erreur les liste.
+- Les dossiers pas encore indexés par Synology Photos sont attendus, comme depuis le menu de l'Explorateur ; `--wait-index <minutes>` change la limite de 10 minutes (0 = pas d'attente).
+- Les dossiers peuvent être donnés en chemin UNC (`\\NAS\photo\...`) ou sur un lecteur réseau (`Z:\...`, connexion mémorisée).
 
 ## Configuration
 

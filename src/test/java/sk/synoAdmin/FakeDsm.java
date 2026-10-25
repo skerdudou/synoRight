@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLContext;
 
@@ -34,6 +35,7 @@ public final class FakeDsm implements AutoCloseable {
 
 	private final Map<Integer, List<Album>> children = new HashMap<>();
 	private final List<String> permissionUpdates = new CopyOnWriteArrayList<>();
+	private final AtomicInteger failingListings = new AtomicInteger();
 	private final HttpServer server;
 
 	public FakeDsm() throws IOException {
@@ -69,6 +71,14 @@ public final class FakeDsm implements AutoCloseable {
 	}
 
 	/**
+	 * Fait échouer les count prochaines listes de dossiers (erreur passagère du NAS).
+	 */
+	public FakeDsm failListings(final int count) {
+		failingListings.set(count);
+		return this;
+	}
+
+	/**
 	 * Paramètres "permission" reçus par SYNO.FotoTeam.Sharing.FolderBatchPermission.
 	 */
 	public List<String> permissionUpdates() {
@@ -90,6 +100,10 @@ public final class FakeDsm implements AutoCloseable {
 				// session toujours valide une fois loggé
 			}
 			case "SYNO.FotoTeam.Browse.Folder" -> {
+				if (failingListings.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+					response.put("success", false).putObject("error").put("code", 117); // erreur passagère simulée
+					break;
+				}
 				final int parent = params.containsKey("id") ? Integer.parseInt(params.get("id")) : ROOT;
 				final ArrayNode list = response.putObject("data").putArray("list");
 				for (final Album album : children.getOrDefault(parent, List.of())) {

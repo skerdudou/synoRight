@@ -8,10 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.AfterEach;
@@ -254,6 +257,159 @@ class RightEngineTest {
 
 		assertEquals(2, messages.size());
 		assertTrue(Files.exists(rightFile("a", FAMILLE)));
+	}
+
+	@Test
+	void manageableFolders_garde1Et2NiveauxSansDoublonNiErreur() throws IOException {
+		final Path troisiemeNiveau = Files.createDirectories(photos.resolve("a/b/c"));
+		final String a = photos.resolve("a").toString();
+		final String ab = photos.resolve("a/b").toString();
+
+		final List<String> unexpected = new ArrayList<>();
+		final List<String> result = new RightEngine(pref).manageableFolders(List.of(
+				a, ab, troisiemeNiveau.toString(), tempDir.toString(), photos.resolve("absent").toString(), a + "\\", ab), unexpected);
+
+		assertEquals(List.of(a, ab), result);
+		// 3e niveau : écarté sans message (il suit son parent) ; hors du dossier photos ou absent : signalé
+		assertEquals(2, unexpected.size(), unexpected.toString());
+		assertTrue(unexpected.get(0).startsWith(tempDir.toString()), unexpected.get(0));
+		assertTrue(unexpected.get(1).startsWith(photos.resolve("absent").toString()), unexpected.get(1));
+	}
+
+	@Test
+	@EnabledOnOs(OS.WINDOWS)
+	void checkFolder_lecteurMappeSurLeDossierPhotos_accepte() {
+		// Q: simule un lecteur réseau pointant sur le dossier qui contient le dossier photos
+		final RightEngine engine = new RightEngine(pref,
+				letter -> Character.toUpperCase(letter) == 'Q' ? Optional.of(tempDir.toString()) : Optional.empty());
+
+		assertEquals(Paths.get("a", "b"), engine.checkFolder("Q:\\photos\\a\\b"));
+	}
+
+	@Test
+	void attenteIndexation_dossierIndexePendantLAttente_retenu() {
+		dsm.album(null, 1, "/a");
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final List<Duration> sleeps = new ArrayList<>();
+		final List<Integer> pending = new ArrayList<>();
+
+		final RightEngine.LoadedRights loaded = engine.folderRightsWaitingIndex(
+				List.of(photos.resolve("a").toString(), photos.resolve("c").toString()),
+				Duration.ofMinutes(1), Duration.ofSeconds(10), d -> {
+					sleeps.add(d);
+					dsm.album(null, 3, "/c"); // indexé entre deux essais
+					return true;
+				}, pending::add);
+
+		assertEquals(List.of(photos.resolve("a").toString(), photos.resolve("c").toString()), List.copyOf(loaded.rights().keySet()));
+		assertTrue(loaded.errors().isEmpty());
+		assertEquals(List.of(Duration.ofSeconds(10)), sleeps);
+		assertEquals(List.of(1), pending);
+	}
+
+	@Test
+	void attenteIndexation_erreurPassagereDuNas_attenteContinue() {
+		dsm.album(null, 1, "/a");
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final int[] sleeps = new int[1];
+
+		final RightEngine.LoadedRights loaded = engine.folderRightsWaitingIndex(
+				List.of(photos.resolve("c").toString()), Duration.ofMinutes(1), Duration.ofSeconds(10), d -> {
+					if (++sleeps[0] == 1) {
+						dsm.failListings(1); // NAS occupé au 2e essai
+					} else {
+						dsm.album(null, 3, "/c"); // indexé avant le 3e
+					}
+					return true;
+				}, n -> {
+					// rien
+				});
+
+		assertEquals(List.of(photos.resolve("c").toString()), List.copyOf(loaded.rights().keySet()));
+		assertTrue(loaded.errors().isEmpty(), loaded.errors().toString());
+	}
+
+	@Test
+	void attenteIndexation_erreurNasPersistante_abandonRapide() {
+		dsm.album(null, 1, "/a");
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		dsm.failListings(1000); // accès refusé à l'espace partagé, par exemple
+		final List<Duration> sleeps = new ArrayList<>();
+
+		final RightEngine.LoadedRights loaded = engine.folderRightsWaitingIndex(
+				List.of(photos.resolve("a").toString()), Duration.ofMinutes(10), Duration.ofSeconds(10), d -> sleeps.add(d), n -> {
+					// rien
+				});
+
+		assertTrue(loaded.rights().isEmpty());
+		assertEquals(1, loaded.errors().size());
+		assertEquals(2, sleeps.size(), "2 nouveaux essais au plus pour une erreur qui n'est pas l'indexation");
+	}
+
+	@Test
+	void attenteIndexation_delaiDepasse_dossierSignale() {
+		dsm.album(null, 1, "/a");
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final List<Duration> sleeps = new ArrayList<>();
+
+		final RightEngine.LoadedRights loaded = engine.folderRightsWaitingIndex(
+				List.of(photos.resolve("a").toString(), photos.resolve("c").toString()),
+				Duration.ofSeconds(30), Duration.ofSeconds(10), d -> sleeps.add(d), n -> {
+					// rien
+				});
+
+		assertEquals(List.of(photos.resolve("a").toString()), List.copyOf(loaded.rights().keySet()));
+		assertEquals(1, loaded.errors().size());
+		assertTrue(loaded.errors().getFirst().startsWith(photos.resolve("c").toString()), loaded.errors().getFirst());
+		assertEquals(3, sleeps.size());
+	}
+
+	@Test
+	void attenteIndexation_annulee_arreteTout() {
+		dsm.album(null, 1, "/a");
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final List<Duration> sleeps = new ArrayList<>();
+
+		final RightEngine.LoadedRights loaded = engine.folderRightsWaitingIndex(
+				List.of(photos.resolve("c").toString()), Duration.ofMinutes(5), Duration.ofSeconds(10), d -> {
+					sleeps.add(d);
+					return false; // annulé
+				}, n -> {
+					// rien
+				});
+
+		assertTrue(loaded.rights().isEmpty());
+		assertEquals(1, loaded.errors().size());
+		assertEquals(1, sleeps.size());
+	}
+
+	@Test
+	void attenteIndexation_autreErreur_sansAttente() throws IOException {
+		final Path troisiemeNiveau = Files.createDirectories(photos.resolve("a/b/c"));
+		dsm.album(null, 1, "/a");
+		final RightEngine engine = new RightEngine(pref);
+		engine.login();
+		final List<Duration> sleeps = new ArrayList<>();
+
+		final RightEngine.LoadedRights loaded = engine.folderRightsWaitingIndex(
+				List.of(photos.resolve("a").toString(), troisiemeNiveau.toString()), Duration.ofMinutes(5), Duration.ofSeconds(10),
+				d -> sleeps.add(d), n -> {
+					// rien
+				});
+
+		assertEquals(1, loaded.rights().size());
+		assertEquals(1, loaded.errors().size());
+		assertTrue(sleeps.isEmpty());
+	}
+
+	@Test
+	void manageableFolders_aucun_listeVide() {
+		assertEquals(List.of(), new RightEngine(pref).manageableFolders(List.of(tempDir.toString()), new ArrayList<>()));
 	}
 
 	@Test

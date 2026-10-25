@@ -71,6 +71,7 @@ Right-click a photo folder (or the background of an open folder) and open the "S
 Notes:
 
 - Multiple selection with the **classic menu**: File Explorer starts one process per selected folder (15 folders at most); the first one gathers the folders of the others, which adds about 1.5 s before the window opens. The Windows 11 menu receives the whole selection directly.
+- **Folder permissions…** waits for folders not indexed yet by Synology Photos (just copied, for example): the window shows "Waiting for Synology Photos to index the folders…" and tries again every 10 seconds, for 10 minutes at most (another NAS error is retried twice only, so that a lasting error such as a refused access is shown quickly). Closing the window cancels the wait. Folders still unknown at the end are reported, the others shown.
 
 - Without an explicit choice, the Windows 11 menu is used when available, otherwise the classic menu (`menuTarget`).
 - On Windows 11, the entry of the Windows 11 menu also appears under "Show more options" (Windows behaviour for packaged extensions). With "Both", it is hidden there to leave room for the classic menu.
@@ -107,6 +108,18 @@ synoRight [-c <configFolder>] [-v] <command>
 - Common options: `-c` / `--config` configuration folder, `-v` / `--verbose` processing times and error details, `-h` / `--help` help (also per command: `synoRight pull -h`), `-V` / `--version` version.
 
 Running `init` again on an existing configuration offers the current values, password included (press Enter to keep them). The stored session is only replaced when the configuration is saved: abandoning the wizard changes nothing.
+
+### Folders created by another tool
+
+A copy or import tool can open the folder permissions window on the folders it has just created:
+
+```
+synoRightGui.exe -c <configFolder> rights --new-folders [--wait-index <minutes>] <folder>...
+```
+
+- Every created folder can be passed, all levels mixed: only the level 1 and 2 folders under the photo folder are kept, deeper ones are ignored without a message (they follow their parent), duplicates removed. Nothing left: no window, exit code 0. If none of the folders is under the photo folder (path written differently from the configuration, network drive not recognized), an error lists them.
+- Folders not indexed yet by Synology Photos are waited for, as from the File Explorer menu; `--wait-index <minutes>` changes the 10-minute limit (0 = no wait).
+- Folders can be given as UNC paths (`\\NAS\photo\...`) or on a mapped network drive (`Z:\...`, persistent mapping).
 
 ## Configuration
 

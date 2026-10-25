@@ -1,14 +1,21 @@
 package sk.synoAdmin.gui;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
+import sk.synoAdmin.LogUtil;
+import sk.synoAdmin.UserException;
 import sk.synoAdmin.cli.AbstractCommand;
+import sk.synoAdmin.engine.RightEngine;
 import sk.synoAdmin.engine.SyncPlan;
+import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.SelectionCollector;
+import sk.synoAdmin.prefs.Preferences;
 
 /**
  * Sous-commande 'gui' (lanceur synoRightGui.exe et menu contextuel) : fenêtres Swing.
@@ -84,12 +91,48 @@ public final class GuiCommand extends AbstractCommand {
 		@Parameters(index = "0..*", arity = "1..*", paramLabel = "<folder>")
 		List<String> folders;
 
+		/**
+		 * Dossiers tout juste créés par un autre outil (copie...), tous niveaux : seuls les dossiers gérables sont gardés,
+		 * sans message pour les autres ; rien à gérer : pas de fenêtre.
+		 */
+		@Option(names = "--new-folders", hidden = true)
+		boolean newFolders;
+
+		/** Attente maximale des dossiers pas encore indexés par Synology Photos, quel que soit l'appelant (0 : aucune). */
+		@Option(names = "--wait-index", hidden = true, paramLabel = "<minutes>", defaultValue = "10")
+		int waitIndexMinutes;
+
+		/**
+		 * Dossiers gérables parmi des dossiers tout juste créés. Aucun : liste vide si tous étaient trop profonds
+		 * (cas normal), erreur explicite sinon (chemins écrits autrement que le dossier photos de la configuration,
+		 * lecteur réseau non reconnu...), plutôt qu'une fin sans rien afficher.
+		 */
+		static List<String> newFolderSelection(final RightEngine engine, final List<String> folders) {
+			final List<String> unexpected = new ArrayList<>();
+			final List<String> selection = engine.manageableFolders(folders, unexpected);
+			if (selection.isEmpty() && !unexpected.isEmpty()) {
+				throw new UserException(Messages.get("gui.rights.newFoldersNone", String.join("\n", unexpected)));
+			}
+			unexpected.forEach(LogUtil::debug);
+			return selection;
+		}
+
+		/** Attente maximale de l'indexation par Synology Photos (menu de l'Explorateur comme appel d'un autre outil). */
+		Duration indexWait() {
+			return Duration.ofMinutes(Math.max(0, waitIndexMinutes));
+		}
+
 		@Override
 		protected void execute() {
 			final Optional<List<String>> all = folders(folders, "rights");
-			if (all.isPresent()) {
-				Gui.setup();
-				Gui.showAndWait(Gui.onEdt(() -> RightsWindow.create(loadPrefs(), all.get())));
+			if (all.isEmpty()) {
+				return;
+			}
+			Gui.setup();
+			final Preferences pref = loadPrefs();
+			final List<String> selection = newFolders ? newFolderSelection(new RightEngine(pref), all.get()) : all.get();
+			if (!selection.isEmpty()) {
+				Gui.showAndWait(Gui.onEdt(() -> RightsWindow.create(pref, selection, indexWait())));
 			}
 		}
 	}

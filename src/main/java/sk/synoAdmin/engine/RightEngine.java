@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -17,6 +18,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
@@ -30,17 +32,33 @@ public class RightEngine {
 
 	// profondeur d'arborescence gérée : Synology Photos ne gère les droits que sur les dossiers de niveau 1 et 2
 	private static final int MAX_DEPTH = 2;
+	// nouveaux essais en attendant l'indexation, pour une erreur du NAS qui n'est pas « pas encore indexé »
+	private static final int MAX_OTHER_RETRIES = 2;
 
 	private final Preferences pref;
 	private final SynoApiClient synoClient;
+	private final Function<Character, Optional<String>> drives;
 
 	private final List<Folder> folders = new ArrayList<>();
 	private final List<String> unindexedFolders = new ArrayList<>();
 	private final List<String> unknownFolders = new ArrayList<>();
 
 	public RightEngine(final Preferences pref) {
+		this(pref, NetworkDrives::mappedRemote);
+	}
+
+	/**
+	 * @param drives chemin distant d'une lettre de lecteur réseau (Z:\... accepté pour \\NAS\photo\...)
+	 */
+	RightEngine(final Preferences pref, final Function<Character, Optional<String>> drives) {
 		this.pref = pref;
+		this.drives = drives;
 		synoClient = new SynoApiClient(pref);
+	}
+
+	// chemin absolu normalisé, lecteur réseau ramené au chemin du partage
+	private Path canonical(final String folder) {
+		return NetworkDrives.toUnc(Paths.get(folder).toAbsolutePath().normalize(), drives);
 	}
 
 	public void getFullState() {
@@ -283,6 +301,14 @@ public class RightEngine {
 	 * (hors du dossier photos, non indexé...) est ignoré et son erreur ajoutée à errors.
 	 */
 	public Map<String, FolderRights> folderRights(final List<String> folderList, final List<String> errors) {
+		final Map<String, UserException> failures = new LinkedHashMap<>();
+		final Map<String, FolderRights> rights = readFolderRights(folderList, failures);
+		failures.forEach((folder, e) -> errors.add(Messages.get("engine.folder.error", folder, e.getMessage())));
+		return rights;
+	}
+
+	// droits des dossiers lisibles ; erreur de chaque autre dossier dans failures
+	private Map<String, FolderRights> readFolderRights(final List<String> folderList, final Map<String, UserException> failures) {
 		// HashMap : clé null acceptée pour la racine
 		final Map<Integer, List<SynoFolderPermission>> listings = new HashMap<>();
 		final Map<String, FolderRights> rights = new LinkedHashMap<>();
@@ -290,10 +316,112 @@ public class RightEngine {
 			try {
 				rights.put(folder, folderRights(resolveFolder(folder, id -> listings.computeIfAbsent(id, synoClient::listFolderPermissions))));
 			} catch (final UserException e) {
-				errors.add(Messages.get("engine.folder.error", folder, e.getMessage()));
+				failures.put(folder, e);
 			}
 		}
 		return rights;
+	}
+
+	/**
+	 * Dossiers gérables parmi ceux reçus (dossiers créés par un autre outil, tous niveaux confondus), un même dossier
+	 * n'étant gardé qu'une fois (première écriture). Les sous-dossiers de 3e niveau et plus, qui suivent leur parent,
+	 * sont écartés sans message ; l'erreur des autres dossiers écartés (hors du dossier photos, absents) est ajoutée
+	 * à unexpected.
+	 */
+	public List<String> manageableFolders(final List<String> folderList, final List<String> unexpected) {
+		final Map<Path, String> kept = new LinkedHashMap<>();
+		for (final String folder : folderList) {
+			try {
+				kept.putIfAbsent(checkFolder(folder), folder);
+			} catch (final UserException e) {
+				if (!tooDeep(folder)) {
+					unexpected.add(Messages.get("engine.folder.error", folder, e.getMessage()));
+				}
+			}
+		}
+		return List.copyOf(kept.values());
+	}
+
+	// sous le dossier photos, au-delà des niveaux gérés
+	private boolean tooDeep(final String folder) {
+		final Path folderPath = canonical(folder);
+		final Path nasPath = canonical(pref.getNasFolder());
+		return folderPath.startsWith(nasPath) && nasPath.relativize(folderPath).getNameCount() > MAX_DEPTH;
+	}
+
+	/**
+	 * Droits des dossiers lisibles (par dossier, chemin tel que reçu, dans l'ordre donné) et erreurs des autres.
+	 */
+	public record LoadedRights(Map<String, FolderRights> rights, List<String> errors) {
+	}
+
+	/** Attente entre deux essais. */
+	@FunctionalInterface
+	public interface Sleeper {
+		/** @return faux si l'attente a été annulée */
+		boolean sleep(Duration duration);
+	}
+
+	// le dossier lui-même reste gérable (pas supprimé, ni hors du dossier photos, ni trop profond)
+	private boolean stillManageable(final String folder) {
+		try {
+			checkFolder(folder);
+			return true;
+		} catch (final UserException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Droits des dossiers, en attendant ceux que Synology Photos n'a pas encore indexés (dossiers tout juste copiés...) :
+	 * nouvel essai sur ces dossiers toutes les delay, timeout au plus. Une autre erreur du NAS (passagère ou non) n'a
+	 * droit qu'à {@link #MAX_OTHER_RETRIES} nouveaux essais : une erreur durable (accès refusé...) est signalée vite.
+	 * Un dossier devenu non gérable (supprimé, hors du dossier photos, trop profond) n'est pas réessayé.
+	 *
+	 * @param pending appelé avant chaque attente avec le nombre de dossiers encore attendus
+	 */
+	public LoadedRights folderRightsWaitingIndex(final List<String> folderList, final Duration timeout, final Duration delay,
+			final Sleeper sleeper, final IntConsumer pending) {
+		final Map<String, FolderRights> read = new HashMap<>();
+		final Map<String, UserException> failures = new LinkedHashMap<>();
+		// échecs successifs d'un dossier pour une autre raison que l'indexation
+		final Map<String, Integer> otherFailures = new HashMap<>();
+		List<String> waiting = folderList;
+		final long retries = delay.isZero() ? 0 : timeout.toMillis() / delay.toMillis();
+		for (long attempt = 0;; attempt++) {
+			final Map<String, UserException> attemptFailures = new LinkedHashMap<>();
+			read.putAll(readFolderRights(waiting, attemptFailures));
+			failures.keySet().removeAll(read.keySet());
+			failures.putAll(attemptFailures);
+			attemptFailures.forEach((folder, e) -> {
+				if (e instanceof NotIndexedException) {
+					otherFailures.remove(folder);
+				} else {
+					otherFailures.merge(folder, 1, Integer::sum);
+				}
+			});
+			waiting = attemptFailures.keySet().stream()
+					.filter(f -> otherFailures.getOrDefault(f, 0) <= MAX_OTHER_RETRIES && stillManageable(f))
+					.toList();
+			if (waiting.isEmpty() || attempt >= retries) {
+				break;
+			}
+			pending.accept(waiting.size());
+			if (!sleeper.sleep(delay)) {
+				break;
+			}
+		}
+		// ordre d'origine
+		final Map<String, FolderRights> rights = new LinkedHashMap<>();
+		final List<String> errors = new ArrayList<>();
+		for (final String folder : folderList) {
+			if (read.containsKey(folder)) {
+				rights.put(folder, read.get(folder));
+			} else if (failures.containsKey(folder)) {
+				errors.add(Messages.get("engine.folder.error", folder, failures.get(folder).getMessage()));
+			}
+		}
+		return new LoadedRights(rights, errors);
 	}
 
 	/**
@@ -355,7 +483,7 @@ public class RightEngine {
 	public List<String> setFolderRights(final Map<String, Set<Group>> wantedByFolder) {
 		final List<String> ordered = wantedByFolder.keySet().stream()
 				// profondeur sans accès disque : un dossier disparu est signalé par forEachFolder, pas par le tri
-				.sorted(Comparator.comparingInt(f -> Paths.get(f).toAbsolutePath().normalize().getNameCount()))
+				.sorted(Comparator.comparingInt(f -> canonical(f).getNameCount()))
 				.toList();
 		return forEachFolder(ordered, f -> setFolderRights(f, wantedByFolder.get(f)));
 	}
@@ -388,8 +516,8 @@ public class RightEngine {
 	 * @return son chemin relatif au dossier photos
 	 */
 	public Path checkFolder(final String folder) {
-		final Path folderPath = Paths.get(folder).toAbsolutePath().normalize();
-		final Path nasPath = Paths.get(pref.getNasFolder()).toAbsolutePath().normalize();
+		final Path folderPath = canonical(folder);
+		final Path nasPath = canonical(pref.getNasFolder());
 
 		if (!Files.isDirectory(folderPath)) {
 			throw new UserException(Messages.get("engine.folder.notFound", folder));
@@ -414,7 +542,7 @@ public class RightEngine {
 	 * @param lister liste des dossiers Synology Photos sous un parent (null : racine)
 	 */
 	private Folder resolveFolder(final String folder, final Function<Integer, List<SynoFolderPermission>> lister) {
-		final Path nasPath = Paths.get(pref.getNasFolder()).toAbsolutePath().normalize();
+		final Path nasPath = canonical(pref.getNasFolder());
 		final Path relativePath = checkFolder(folder);
 
 		// résolution arbo des droits FS et DB en même temps que l'on avance dans l'arborescence Synology
@@ -436,7 +564,7 @@ public class RightEngine {
 				}
 			}
 			if (!found) {
-				throw new UserException(Messages.get("engine.folder.notIndexed", newFolder.getName()));
+				throw new NotIndexedException(Messages.get("engine.folder.notIndexed", newFolder.getName()));
 			}
 			parent = newFolder;
 		}

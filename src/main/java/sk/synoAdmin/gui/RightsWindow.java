@@ -9,9 +9,11 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -23,6 +25,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.WindowConstants;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -44,13 +47,20 @@ final class RightsWindow {
 	private static final Color FALLBACK = new Color(0xE08A00);
 	// au-delà, le compte rendu est affiché dans une zone défilante
 	private static final int MAX_MESSAGE_LINES = 12;
+	// délai entre deux essais en attendant l'indexation des dossiers
+	private static final Duration INDEX_RETRY_DELAY = Duration.ofSeconds(10);
 
 	private RightsWindow() {
 		// fabrique
 	}
 
-	/** Construit la fenêtre (sur l'EDT, sans accès réseau) ; les droits sont chargés à l'ouverture. */
-	static JFrame create(final Preferences pref, final List<String> selection) {
+	/**
+	 * Construit la fenêtre (sur l'EDT, sans accès réseau) ; les droits sont chargés à l'ouverture.
+	 *
+	 * @param indexWait attente maximale des dossiers pas encore indexés par Synology Photos (tout juste copiés...),
+	 *            nulle : dossiers non indexés écartés tout de suite
+	 */
+	static JFrame create(final Preferences pref, final List<String> selection, final Duration indexWait) {
 		// avant toute connexion : dossiers hors du dossier photos écartés (erreur immédiate s'il n'en reste aucun)
 		final List<String> skipped = new ArrayList<>();
 		final List<String> folders = new RightEngine(pref).checkFolders(selection, skipped);
@@ -100,19 +110,9 @@ final class RightsWindow {
 		content.add(bottom, BorderLayout.SOUTH);
 		frame.setContentPane(content);
 
-		final Runnable[] load = new Runnable[1];
 		final boolean[] warned = new boolean[1];
-		// moteur neuf à chaque appel : il accumule les dossiers résolus
-		load[0] = () -> Gui.runAsync(frame.getContentPane(), () -> {
-			final RightEngine engine = new RightEngine(pref);
-			engine.login();
-			final List<String> errors = new ArrayList<>();
-			final Map<String, FolderRights> rights = engine.folderRights(folders, errors);
-			if (rights.isEmpty()) {
-				throw new UserException(String.join("\n", errors));
-			}
-			return new Loaded(rights, errors);
-		}, loaded -> {
+		final AtomicBoolean closed = new AtomicBoolean();
+		final Consumer<RightEngine.LoadedRights> show = loaded -> {
 			final List<String> paths = List.copyOf(loaded.rights().keySet());
 			final List<FolderRights> rights = List.copyOf(loaded.rights().values());
 			final RightsTableModel model = model(paths, rights);
@@ -135,7 +135,38 @@ final class RightsWindow {
 				JOptionPane.showMessageDialog(frame, Messages.get("gui.rights.skipped", String.join("\n", ignored)), Gui.TITLE,
 						JOptionPane.WARNING_MESSAGE);
 			}
-		}, frame::dispose);
+		};
+		final Runnable[] load = new Runnable[1];
+		// moteur neuf à chaque appel : il accumule les dossiers résolus
+		load[0] = () -> {
+			// attente de l'indexation au premier chargement seulement (après Appliquer, les dossiers sont connus)
+			final boolean waitIndex = !warned[0] && indexWait.isPositive();
+			Gui.runAsync(frame.getContentPane(), () -> {
+				final RightEngine engine = new RightEngine(pref);
+				engine.login();
+				final RightEngine.LoadedRights loaded;
+				if (waitIndex) {
+					loaded = engine.folderRightsWaitingIndex(folders, indexWait, INDEX_RETRY_DELAY, d -> sleepUnlessClosed(d, closed),
+							pending -> SwingUtilities.invokeLater(() -> title.setText(Messages.get("gui.rights.waitingIndex", pending))));
+				} else {
+					final List<String> errors = new ArrayList<>();
+					loaded = new RightEngine.LoadedRights(engine.folderRights(folders, errors), errors);
+				}
+				if (loaded.rights().isEmpty() && !closed.get()) {
+					throw new UserException(String.join("\n", loaded.errors()));
+				}
+				return loaded;
+			}, loaded -> {
+				// fenêtre fermée pendant l'attente : plus rien à afficher
+				if (!closed.get()) {
+					show.accept(loaded);
+				}
+			}, frame::dispose);
+			if (waitIndex) {
+				// l'attente peut être longue : la fenêtre reste fermable (annulation)
+				close.setEnabled(true);
+			}
+		};
 		apply.addActionListener(e -> {
 			final RightsTableModel model = (RightsTableModel) table.getModel();
 			final var wanted = model.wanted(); // lu sur l'EDT
@@ -160,6 +191,11 @@ final class RightsWindow {
 			public void windowOpened(final WindowEvent e) {
 				load[0].run();
 			}
+
+			@Override
+			public void windowClosed(final WindowEvent e) {
+				closed.set(true); // interrompt une attente d'indexation en cours
+			}
 		});
 		if (single) {
 			frame.setSize(520, 380);
@@ -170,8 +206,18 @@ final class RightsWindow {
 		return frame;
 	}
 
-	/** Droits chargés et erreurs des dossiers écartés. */
-	private record Loaded(Map<String, FolderRights> rights, List<String> errors) {
+	/** Attend la durée par petits pas ; faux dès que la fenêtre est fermée. */
+	private static boolean sleepUnlessClosed(final Duration duration, final AtomicBoolean closed) {
+		final long end = System.nanoTime() + duration.toNanos();
+		try {
+			while (!closed.get() && System.nanoTime() < end) {
+				Thread.sleep(200);
+			}
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+		return !closed.get();
 	}
 
 	static RightsTableModel model(final List<String> folders, final List<FolderRights> rights) {

@@ -77,6 +77,7 @@ final class GuiStartup {
 	private static JDialog createWindow() {
 		final JDialog dialog = new JDialog((Dialog) null, Gui.TITLE, false);
 		dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+		dialog.setIconImages(Gui.icons());
 		dialog.setResizable(false);
 		final JProgressBar progress = new JProgressBar();
 		progress.setIndeterminate(true);

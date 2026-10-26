@@ -223,6 +223,7 @@ final class ConfigWindow {
 
 	private void buildFrame() {
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		frame.setIconImages(Gui.icons());
 		frame.addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowOpened(final WindowEvent e) {

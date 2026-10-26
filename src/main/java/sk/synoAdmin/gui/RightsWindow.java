@@ -69,6 +69,7 @@ final class RightsWindow {
 		final JFrame frame = new JFrame(single ? Messages.get("gui.rights.windowTitle", Gui.TITLE)
 				: Messages.get("gui.rights.windowTitleMulti", Gui.TITLE));
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // fermeture via la garde, toujours terminée par dispose()
+		frame.setIconImages(Gui.icons());
 		final CloseGuard guard = new CloseGuard();
 		final JLabel title = new JLabel(Messages.get("gui.rights.loading"));
 		title.putClientProperty("FlatLaf.styleClass", "h3");

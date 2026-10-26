@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** mise à jour du zip portable par l'appli (script PowerShell), contrôle strict des téléchargements (digest obligatoire, taille), date de vérification enregistrée après toute vérification dans le dossier de configuration.
+**Goal:** mise à jour du zip portable par l'appli (script PowerShell), contrôle strict des téléchargements (digest obligatoire, taille), date de vérification enregistrée après toute vérification (stockage inchangé, registre).
 
 **Architecture:** `Release` décrit deux assets (setup, zip) avec URL, taille et empreinte ; `Updater` choisit le mode (setup, portable, page), télécharge un asset en exigeant l'empreinte et la taille ; un nouveau `PortableUpdate` décompresse le zip en sécurité, vérifie qu'aucune autre instance ne tourne et lance la ressource `apply-update.ps1` ; la fenêtre de configuration enchaîne selon le mode.
 
@@ -42,11 +42,11 @@
   - `record Release.Asset(String url, long size, Optional<String> sha256)` ; `record Release(String version, String pageUrl, Optional<Asset> setup, Optional<Asset> zip)` ; `Release.parse(json)` lit pour chaque asset `browser_download_url`, `size`, `digest` (`sha256:` ⇒ hex, sinon vide) ; noms exacts de la spec.
   - `enum Updater.Mode { INSTALL, PORTABLE, OPEN_PAGE }` ; `Updater.mode(Release r, Optional<Path> appDir)` : appDir présent + `unins000.exe` + setup ⇒ INSTALL ; appDir présent sans `unins000.exe` + zip + `synoRightGui.exe` dans appDir ⇒ PORTABLE ; sinon OPEN_PAGE. (`UpdateChecker.installedBySetup` peut rester comme aide.)
   - `Updater.download(Release.Asset asset, String fileName, Path dir, LongConsumer length, LongConsumer progress, BooleanSupplier cancelled): Path` (garder la surcharge package-private à délais injectables) : `sha256` vide ⇒ `UserException` `update.download.noDigest` **avant** tout téléchargement ; taille reçue ≠ `asset.size()` ⇒ fichier supprimé + `UserException` `update.download.badSize` ; empreinte ⇒ comme aujourd'hui (`badDigest`).
-  - `UpdateChecker.lastCheck(Path configDir): Optional<Instant>` et `markChecked(Path configDir, Instant)` : fichier `update.synoRight.properties`, clé `lastCheck` (secondes epoch), via `PropertiesFiles` (enregistrement atomique existant) ; plus aucun accès registre (supprimer `reg add/query`, `parseLastCheck` peut devenir un parse de valeur texte).
+  - `UpdateChecker.lastCheck()` / `markChecked(Instant)` : inchangés (registre `HKCU\Software\synoRight\Update`, valeur `LastCheck`).
   - Appels : vérification automatique et manuelle (IHM) et CLI `update` enregistrent la date **après toute vérification, réussie ou non** (finally).
 
-- [ ] **Step 1: Tests** — `parse` avec setup + zip (taille, digest) et un asset sans digest ⇒ `sha256` vide ; `mode` : `unins000.exe` + setup ⇒ INSTALL, dossier sans `unins000.exe` avec `synoRightGui.exe` + zip ⇒ PORTABLE, zip absent ⇒ OPEN_PAGE, appDir vide (jar) ⇒ OPEN_PAGE ; `download` : sans digest ⇒ `noDigest` et aucun appel au serveur (compteur du HttpServer loopback), taille annoncée différente ⇒ `badSize` et fichier absent ; `lastCheck`/`markChecked` aller-retour dans un `@TempDir`, fichier absent ⇒ vide, valeur illisible ⇒ vide.
-- [ ] **Step 2:** tests ⇒ échec. **Step 3:** implémenter (clés EN : `update.download.noDigest` « The update file has no published checksum: download refused. », `update.download.badSize` « The downloaded file does not have the expected size ({0} bytes instead of {1}). » ; traduire). **Step 4:** `mvn -B -q verify`. **Step 5:** commit « Mise à jour : empreinte obligatoire, contrôle de taille, date de vérification dans le dossier de configuration ».
+- [ ] **Step 1: Tests** — `parse` avec setup + zip (taille, digest) et un asset sans digest ⇒ `sha256` vide ; `mode` : `unins000.exe` + setup ⇒ INSTALL, dossier sans `unins000.exe` avec `synoRightGui.exe` + zip ⇒ PORTABLE, zip absent ⇒ OPEN_PAGE, appDir vide (jar) ⇒ OPEN_PAGE ; `download` : sans digest ⇒ `noDigest` et aucun appel au serveur (compteur du HttpServer loopback), taille annoncée différente ⇒ `badSize` et fichier absent ; date enregistrée même quand la vérification échoue (extraire la séquence vérifier-puis-enregistrer dans une méthode testable avec un enregistreur injecté, ex. `checkAndRecord(Supplier<Release>, Consumer<Instant>)`).
+- [ ] **Step 2:** tests ⇒ échec. **Step 3:** implémenter (clés EN : `update.download.noDigest` « The update file has no published checksum: download refused. », `update.download.badSize` « The downloaded file does not have the expected size ({0} bytes instead of {1}). » ; traduire). **Step 4:** `mvn -B -q verify`. **Step 5:** commit « Mise à jour : empreinte obligatoire, contrôle de taille, date enregistrée après toute vérification ».
 
 ### Task 2: Mise à jour du zip portable (décompression, script, autres instances)
 
@@ -77,7 +77,7 @@
 - Test: tests existants verts ; test unitaire de toute logique de décision extraite
 
 **Interfaces:**
-- Consumes: `Updater.mode(release, Launchers.appDir())`, `Updater.download(asset, fileName, …)`, `PortableUpdate.otherInstances/extract/start`, `UpdateChecker.markChecked(configDir, …)`.
+- Consumes: `Updater.mode(release, Launchers.appDir())`, `Updater.download(asset, fileName, …)`, `PortableUpdate.otherInstances/extract/start`.
 - Décisions :
   - OPEN_PAGE ⇒ navigateur (inchangé).
   - INSTALL ⇒ flux actuel (garde `confirmClose`, téléchargement du setup avec progression/annulation, lancement, sortie), avec la nouvelle signature (asset `setup`, nom `synoRight-<v>-setup.exe`).

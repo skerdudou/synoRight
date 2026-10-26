@@ -6,10 +6,9 @@ Demande de Steven (2026-10-26) : synoRight et Copybot se mettent à jour de la m
 
 1. **Mode portable (zip)** : mis à jour par l'appli au lieu d'ouvrir la page de la release.
 2. **Contrôle strict du téléchargement** : asset sans `digest` refusé ; taille différente de `size` = échec.
-3. **Date de dernière vérification** enregistrée après toute vérification (réussie ou non), dans le dossier de configuration au lieu du registre.
+3. **Date de dernière vérification** enregistrée après toute vérification (réussie ou non).
 
-
-**Écart voulu avec Copybot** : l'installateur de synoRight reste en installation pour l'utilisateur seul (décision de Steven) ; pas de choix « pour tous les utilisateurs ».
+**Écarts voulus avec Copybot** (décisions de Steven) : l'installateur de synoRight reste en installation pour l'utilisateur seul (pas de choix « pour tous les utilisateurs ») ; synoRight peut garder des réglages dans le registre, la date de dernière vérification y reste.
 
 ## Modes
 
@@ -44,7 +43,7 @@ Dossier de l'appli = parent de `jpackage.app-path`.
 
 - Au plus une vérification automatique par 24 h : dernière vérification absente, dans le futur ou d'il y a 24 h ou plus (inchangé).
 - **Date enregistrée après toute vérification, réussie ou non** (automatique, manuelle, CLI `update`) : pas de nouvel essai à chaque démarrage hors ligne.
-- **Stockage** : fichier `update.synoRight.properties` (clé `lastCheck`, secondes epoch) dans le dossier de configuration en vigueur ; un dossier portable le transporte avec sa configuration. L'ancienne valeur du registre (`HKCU\Software\synoRight\Update`) n'est plus lue ni écrite.
+- **Stockage** : inchangé, `HKCU\Software\synoRight\Update`, valeur `LastCheck`.
 - Échec automatique : journalisé seulement ; manuelle : dit toujours le résultat ; version de développement : aucune vérification (inchangé).
 - « Mettre à jour » n'interrompt jamais une opération en cours de la fenêtre de configuration (garde `busy` existante, message habituel).
 

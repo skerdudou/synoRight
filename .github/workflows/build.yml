@@ -114,7 +114,7 @@ jobs:
             '2. Run synoRight to configure the NAS connection, the photo folder and the groups, then install the File Explorer menu.'
             '3. The Windows 11 menu asks once for administrator approval, to trust the `CN=synoRight` certificate shipped as `synoRight.cer`.'
             ''
-            "``synoRight-$env:VERSION-windows-x64.zip`` is the portable version: unzip it into any folder and run ``synoRightGui.exe`` (the archive contains a ``synoRight`` folder)."
+            "``synoRight-$env:VERSION-windows-x64.zip`` is the portable version: unzip it into any folder and run ``synoRightGui.exe`` (the archive contains a ``synoRight`` folder); the portable copy updates itself from the configuration window."
             ''
             "``synoRight-$env:VERSION.jar`` is the command line alone (``java -jar``, Java 25+), without the Windows 11 menu."
           )

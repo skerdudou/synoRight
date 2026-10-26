@@ -43,7 +43,7 @@ synoRight synchronises the folder permissions of the **Synology Photos Shared Sp
 
 The **Windows 11 menu** is installed for the current user, but the first installation on a computer asks **once for administrator approval**: Windows must trust the `CN=synoRight` certificate that signs the menu package. The UAC prompt shows "Windows PowerShell": it imports `synoRight.cer` (from the application folder) into the local machine "Trusted People" store. The classic menu needs no administrator rights.
 
-**Updating**: the configuration window shows when a new version is available and can download and install it. You can also run the new setup over the previous version. The Explorer menus are repaired automatically.
+**Updating**: the configuration window shows when a new version is available and can download and install it. You can also run the new setup over the previous version. The Explorer menus are repaired automatically. A download whose checksum (SHA-256) is not published with the release is refused.
 
 **Uninstalling**: Windows Settings > Apps > synoRight. The uninstaller removes the Explorer menus; the configuration is kept.
 
@@ -52,6 +52,8 @@ The **Windows 11 menu** is installed for the current user, but the first install
 `synoRight-<version>-windows-x64.zip` contains the same application: unzip it into e.g. `C:\Program Files` (the archive contains a `synoRight` folder; writing there needs administrator rights) or into any folder, then run **`synoRightGui.exe`**. The `synoRight` folder contains `synoRight.exe` (command line), `synoRightGui.exe` (no console) and, for the Windows 11 menu, the `synoRightMenu-<version>.dll`, `synoRight.msix` and `synoRight.cer` files.
 
 The menu commands point to the application at its current location: after replacing or moving the folder, the menus are repaired automatically the next time the GUI starts (or with `synoRight menu repair`).
+
+**Updating**: the portable copy also updates from the configuration window. Close the other synoRight windows first (the update is refused while they are open). The new zip is downloaded and checked (size and published SHA-256 checksum; without a published checksum the download is refused), then synoRight closes, the `app` and `runtime` folders and the application files are replaced, and synoRight starts again. The configuration placed beside the exe and your other files are kept. If the folder is not writable (e.g. under `C:\Program Files`), Windows asks for administrator approval for the copy. The steps are logged in `update.log` in the configuration folder.
 
 ### Jar
 

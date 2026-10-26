@@ -87,6 +87,38 @@ public final class ModernMenuInstaller {
 				.toList();
 	}
 
+	/**
+	 * Démarrage de l'IHM : supprime les anciennes DLL du dossier de l'application (laissées par la mise à jour d'une copie
+	 * portable) si aucun menu Windows 11 ne peut encore s'en servir. Rien n'est lancé tant qu'aucune ancienne DLL n'est
+	 * présente ; les erreurs sont journalisées en debug.
+	 */
+	public static void deleteStaleDllsAtStartup(final Path appDir) {
+		final Optional<String> version = AppVersion.current();
+		if (version.isEmpty()) {
+			return;
+		}
+		try (Stream<Path> files = Files.list(appDir)) {
+			if (staleDlls(files.map(file -> file.getFileName().toString()).toList(), version.get()).isEmpty()) {
+				return;
+			}
+		} catch (final IOException e) {
+			LogUtil.debug("Dossier " + appDir + " illisible : " + e.getMessage());
+			return;
+		}
+		final boolean modernConfigured = ProcessRunner.run(List.of("reg", "query", MENU_KEY)).ok();
+		if (staleDllsUnused(modernConfigured, InstallMarker.read().map(InstallMarker::version), version.get())) {
+			deleteStaleDlls(appDir);
+		}
+	}
+
+	/**
+	 * Anciennes DLL inutilisées : menu Windows 11 non configuré, ou installé pour la version courante (son package pointe
+	 * vers la DLL courante). Sinon (réparation échouée), l'ancien package peut encore pointer vers une ancienne DLL.
+	 */
+	static boolean staleDllsUnused(final boolean modernConfigured, final Optional<String> installedVersion, final String version) {
+		return !modernConfigured || installedVersion.filter(version::equals).isPresent();
+	}
+
 	/** Supprime les anciennes DLL du dossier de l'application ; celles encore chargées par l'Explorateur sont ignorées. */
 	static void deleteStaleDlls(final Path appDir) {
 		final Optional<String> version = AppVersion.current();

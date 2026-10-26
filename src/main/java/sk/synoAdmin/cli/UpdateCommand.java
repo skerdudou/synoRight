@@ -1,6 +1,5 @@
 package sk.synoAdmin.cli;
 
-import java.time.Instant;
 import java.util.Optional;
 
 import picocli.CommandLine.Command;
@@ -23,8 +22,7 @@ final class UpdateCommand extends AbstractCommand {
 			return;
 		}
 		System.out.println(Messages.get("update.cli.current", current.get()));
-		final Release latest = UpdateChecker.fetchLatest();
-		UpdateChecker.markChecked(Instant.now());
+		final Release latest = UpdateChecker.fetchLatestAndRecord();
 		if (UpdateChecker.newer(latest, current.get())) {
 			System.out.println(Messages.get("update.cli.latest", latest.version(), latest.pageUrl()));
 		} else {

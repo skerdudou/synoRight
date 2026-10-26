@@ -1,6 +1,7 @@
 package sk.synoAdmin.menu;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Paths;
@@ -93,5 +94,15 @@ class ModernMenuInstallerTest {
 		assertEquals(List.of("synoRightMenu.dll", "synoRightMenu-0.3.dll", "SYNORIGHTMENU-0.2.DLL"),
 				ModernMenuInstaller.staleDlls(List.of("synoRightMenu.dll", "synoRightMenu-0.3.dll", "synoRightMenu-0.4.dll",
 						"synoRight.msix", "SYNORIGHTMENU-0.2.DLL"), "0.4"));
+	}
+
+	@Test
+	void staleDllsUnusedWithoutWindows11MenuOrWhenItIsInstalledForTheCurrentVersion() {
+		assertTrue(ModernMenuInstaller.staleDllsUnused(false, Optional.empty(), "0.4"));
+		assertTrue(ModernMenuInstaller.staleDllsUnused(false, Optional.of("0.3"), "0.4"));
+		assertTrue(ModernMenuInstaller.staleDllsUnused(true, Optional.of("0.4"), "0.4"));
+		// menu configuré pour une autre version (réparation échouée) ou sans repère : l'ancienne DLL peut encore servir
+		assertFalse(ModernMenuInstaller.staleDllsUnused(true, Optional.of("0.3"), "0.4"));
+		assertFalse(ModernMenuInstaller.staleDllsUnused(true, Optional.empty(), "0.4"));
 	}
 }

@@ -57,20 +57,22 @@ Source: "{#SourceDir}\*"; Excludes: "synoRightMenu-*.dll"; DestDir: "{app}"; Fla
 ; est donc identique (réinstallation de la même version) et n'est pas remplacé. Absente si construite avec -Dnative.skip.
 Source: "{#SourceDir}\synoRightMenu-*.dll"; DestDir: "{app}"; Flags: onlyifdoesntexist skipifsourcedoesntexist
 
+; dossier de démarrage = dossier de l'application : une configuration posée à côté de l'application est trouvée
+; quel que soit le lancement (la configuration du profil, ~\.synoRight, reste prioritaire)
 [Icons]
-Name: "{autoprograms}\synoRight"; Filename: "{app}\synoRightGui.exe"
-Name: "{autodesktop}\synoRight"; Filename: "{app}\synoRightGui.exe"; Tasks: desktopicon
+Name: "{autoprograms}\synoRight"; Filename: "{app}\synoRightGui.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\synoRight"; Filename: "{app}\synoRightGui.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 ; répare les menus de l'Explorateur seulement s'ils existent et pointent vers une autre version
-Filename: "{app}\synoRight.exe"; Parameters: "menu repair --if-needed"; Flags: runhidden waituntilterminated; StatusMsg: "{cm:RepairMenus}"
-Filename: "{app}\synoRightGui.exe"; Description: "{cm:LaunchApp}"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\synoRight.exe"; Parameters: "menu repair --if-needed"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; StatusMsg: "{cm:RepairMenus}"
+Filename: "{app}\synoRightGui.exe"; WorkingDir: "{app}"; Description: "{cm:LaunchApp}"; Flags: postinstall nowait skipifsilent
 ; mise à jour lancée par l'IHM (/SILENT ... /RELAUNCH) : l'IHM est relancée sans page finale
-Filename: "{app}\synoRightGui.exe"; Flags: nowait; Check: WizardSilent and RelaunchRequested
+Filename: "{app}\synoRightGui.exe"; WorkingDir: "{app}"; Flags: nowait; Check: WizardSilent and RelaunchRequested
 
 [UninstallRun]
 ; retire les menus avant la suppression des fichiers (la configuration est conservée)
-Filename: "{app}\synoRight.exe"; Parameters: "menu uninstall"; Flags: runhidden waituntilterminated; RunOnceId: "menuUninstall"
+Filename: "{app}\synoRight.exe"; Parameters: "menu uninstall"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "menuUninstall"
 
 [Code]
 // Vrai si /RELAUNCH figure sur la ligne de commande (sans valeur : le paramètre param ne convient pas)

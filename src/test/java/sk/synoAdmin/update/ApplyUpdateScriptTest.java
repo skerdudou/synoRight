@@ -61,7 +61,7 @@ class ApplyUpdateScriptTest {
 
 	private void run(final Path script, final Path newDir) throws IOException, InterruptedException {
 		final List<String> command = new ArrayList<>(PortableUpdate.scriptCommand(script, deadPid(), appDir, newDir,
-				appDir.resolve("synoRightGui.exe"), logDir));
+				appDir.resolve("synoRightGui.exe"), logDir, configDir()));
 		command.add("-NoRelaunch");
 		final Process process = new ProcessBuilder(command).redirectErrorStream(true)
 				.redirectOutput(tmp.resolve("script-output.txt").toFile()).start();
@@ -88,6 +88,17 @@ class ApplyUpdateScriptTest {
 		return Files.readString(logDir.resolve("update.log"), StandardCharsets.UTF_8);
 	}
 
+	// dossier de configuration en cours (avec une espace), repassé par -c à la relance
+	private Path configDir() {
+		return tmp.resolve("my config");
+	}
+
+	// relance prévue (journalisée avec -NoRelaunch) : exe de l'appli et configuration en cours
+	private void assertRelaunchKeepsTheConfiguration(final String log) {
+		assertTrue(log.contains("relaunch skipped (-NoRelaunch): " + appDir.resolve("synoRightGui.exe") + " -c \"" + configDir() + "\""),
+				log);
+	}
+
 	@Test
 	void replacesTheAppImageKeepsUserFilesAndRemovesTheTemporaryFolder() throws Exception {
 		oldVersion();
@@ -102,12 +113,39 @@ class ApplyUpdateScriptTest {
 		assertTrue(log.contains("robocopy app"), log);
 		assertTrue(log.contains("robocopy runtime"), log);
 		assertTrue(log.contains("Update finished"), log);
+		assertRelaunchKeepsTheConfiguration(log);
 		// suppression éventuellement différée (le script tournait depuis ce dossier)
 		final long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
 		while (Files.exists(temp) && System.nanoTime() < deadline) {
 			Thread.sleep(200);
 		}
 		assertFalse(Files.exists(temp), log);
+	}
+
+	@Test
+	void stopsTheCopyAfterTheFirstRobocopyFailureAndStillRelaunches() throws Exception {
+		oldVersion();
+		// « app » est un fichier dans l'appli : son miroir échoue (code robocopy 16)
+		final Path app = appDir.resolve("app");
+		Files.delete(app.resolve("old.jar"));
+		Files.delete(app);
+		Files.writeString(app, "not a folder");
+		final Path temp = Files.createDirectories(tmp.resolve("synoRight-update-2"));
+		final Path script = PortableUpdate.copyScript(temp);
+		final Path newDir = newVersion(temp.resolve("synoRight"));
+
+		run(script, newDir);
+
+		final String log = log();
+		assertTrue(log.contains("robocopy app failed"), log);
+		assertTrue(log.contains("Update failed"), log);
+		assertFalse(log.contains("robocopy runtime"), log);
+		assertFalse(log.contains("robocopy root files"), log);
+		// runtime et fichiers racine intacts : pas de nouvel exe sur une image incomplète
+		assertEquals(List.of("x"), names(appDir.resolve("runtime")));
+		assertEquals("old", Files.readString(appDir.resolve("synoRightGui.exe")));
+		assertFalse(Files.exists(appDir.resolve("synoRightMenu-0.3.dll")));
+		assertRelaunchKeepsTheConfiguration(log);
 	}
 
 	@Test

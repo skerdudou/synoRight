@@ -28,16 +28,18 @@ Dossier de l'appli = parent de `jpackage.app-path`.
 ## Mode portable
 
 - Décompression du zip dans le dossier temporaire : refus d'une entrée qui sort du dossier (zip slip) et d'un zip sans dossier racine `synoRight/` contenant `synoRightGui.exe` (le zip de la CI a ce dossier racine).
-- **Autres instances** : avant de télécharger, si un autre processus synoRight tourne depuis le même dossier d'appli (`ProcessHandle.allProcesses()`, commande dans ce dossier, hors processus courant), la mise à jour est refusée avec un message « fermer les autres fenêtres synoRight » (fenêtres des droits ouvertes depuis l'Explorateur, synchronisation…).
-- L'appli copie la ressource `apply-update.ps1` dans le dossier temporaire et la lance détachée : `powershell -NoProfile -ExecutionPolicy Bypass -File apply-update.ps1 -AppPid <pid> -AppDir <dossier de l'appli> -NewDir <dossier décompressé>\synoRight -Relaunch <dossier de l'appli>\synoRightGui.exe -LogDir <dossier de configuration>`, puis quitte (même sortie que pour le setup : garde des modifications non enregistrées d'abord).
+- **Autres instances** : avant de télécharger, si un autre processus synoRight tourne depuis le même dossier d'appli (`ProcessHandle.allProcesses()`, commande dans ce dossier, hors processus courant), la mise à jour est refusée avec un message « fermer les autres fenêtres synoRight » (fenêtres des droits ouvertes depuis l'Explorateur, synchronisation…). Limite : une instance élevée cache son exécutable (le JDK ne donne alors ni commande ni ligne de commande) ; le script la repère par son nom (étape 1).
+- **Dossier non modifiable** (fichier témoin impossible à créer dans le dossier de l'appli) : avant de télécharger, un message annonce que Windows demandera l'accord d'un administrateur (`update.portable.needsAdmin`), l'utilisateur peut renoncer.
+- L'appli copie la ressource `apply-update.ps1` dans le dossier temporaire et la lance détachée : `powershell -NoProfile -ExecutionPolicy Bypass -File apply-update.ps1 -AppPid <pid> -AppDir <dossier de l'appli> -NewDir <dossier décompressé>\synoRight -Relaunch <dossier de l'appli>\synoRightGui.exe -LogDir <dossier de configuration> -ConfigDir <dossier de configuration>`, puis quitte (même sortie que pour le setup : garde des modifications non enregistrées d'abord).
 - Le script :
-  1. attend la fin du processus `AppPid` et de tout processus dont l'exécutable est dans `AppDir` (au plus 60 s ; sinon abandon sans rien toucher, journalisé, et relance) ;
+  1. attend la fin du processus `AppPid` et de tout processus dont l'exécutable est dans `AppDir`, ou nommé `synoRight` / `synoRightGui` avec un chemin illisible (instance élevée) (au plus 60 s ; sinon abandon sans rien toucher, journalisé, et relance) ;
   2. remplace **seulement l'image de l'appli** : `app` et `runtime` en miroir (`robocopy <new>\<d> <app>\<d> /MIR /R:2 /W:1`), puis les fichiers racine de la nouvelle version copiés sans rien supprimer à la racine (`robocopy <new> <app> /LEV:1 /R:2 /W:1`) : la configuration posée à côté de l'exe (`config.synoRight.properties`, `session…`), l'ancienne DLL du menu (versionnée, éventuellement verrouillée par l'Explorateur, nettoyée ensuite par la réparation des menus) et tout fichier de l'utilisateur restent ;
   3. dossier de l'appli non modifiable : la copie (étape 2) est relancée élevée (`Start-Process powershell -Verb RunAs -Wait`, paramètre `-CopyOnly`), une demande UAC ; le script non élevé garde la relance, pour que l'appli ne tourne jamais en administrateur ;
-  4. code robocopy ≥ 8 : journalisé, relance quand même (pas de retour arrière automatique) ;
-  5. relance `synoRightGui.exe` (la réparation automatique des menus au démarrage réenregistre le menu Windows 11 et nettoie l'ancienne DLL) ;
+  4. code robocopy ≥ 8 : journalisé, la copie s'arrête là (ni runtime ni fichiers racine neufs sur une image incomplète), relance quand même (pas de retour arrière automatique) ; robocopy appelé par son chemin complet (`%SystemRoot%\System32\robocopy.exe`) ;
+  5. relance `synoRightGui.exe -c "<ConfigDir>"` dans tous les cas (succès, abandon, élévation refusée), pour garder la configuration en cours (la réparation automatique des menus au démarrage réenregistre le menu Windows 11 et nettoie l'ancienne DLL) ;
   6. supprime le dossier temporaire (sauf lui-même s'il ne peut pas) ; journal `update.log` dans le dossier de configuration (ajout, horodaté).
-- Paramètre `-NoRelaunch` pour les tests.
+- Paramètre `-NoRelaunch` pour les tests (la relance prévue est journalisée).
+- Au démarrage de l'IHM, en tâche de fond (jamais attendue, erreurs en debug) : suppression des dossiers `synoRight-update-*` de `java.io.tmpdir` modifiés il y a plus d'un jour, et des anciennes DLL du menu dans le dossier de l'appli quand aucun menu Windows 11 ne peut plus s'en servir (menu non configuré, ou installé pour la version courante).
 
 ## Vérification
 

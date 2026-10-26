@@ -4,6 +4,7 @@
     [Parameter(Mandatory = $true)][string]$NewDir,
     [Parameter(Mandatory = $true)][string]$Relaunch,
     [Parameter(Mandatory = $true)][string]$LogDir,
+    [string]$ConfigDir,
     [switch]$CopyOnly,
     [switch]$NoRelaunch
 )
@@ -12,7 +13,9 @@
 # l'application (app et runtime en miroir, fichiers racine copiés sans rien supprimer), relance l'application puis
 # supprime le dossier temporaire (parent de NewDir, qui doit être le dossier du script). La configuration posée à côté
 # de l'exe, l'ancienne DLL du menu et tout fichier de l'utilisateur restent. Journal en anglais (fichier technique) : LogDir\update.log.
-# -CopyOnly : copie seule (relance élevée quand le dossier n'est pas modifiable) ; -NoRelaunch : pour les tests.
+# -ConfigDir : dossier de configuration en cours, repassé par -c à chaque relance (succès, abandon, élévation refusée).
+# -CopyOnly : copie seule (relance élevée quand le dossier n'est pas modifiable) ; -NoRelaunch : pour les tests (la
+# relance prévue est seulement journalisée).
 
 $ErrorActionPreference = 'Continue'
 
@@ -41,20 +44,40 @@ function Write-Log([string]$message) {
     }
 }
 
+# arguments de la relance : -c "<dossier de configuration>" (un « \ » final casserait les guillemets : racine d'un
+# lecteur passée en « X:\. »)
+$relaunchArgs = @()
+if ($ConfigDir) {
+    $config = Get-FullPath $ConfigDir
+    if ($config.EndsWith(':')) {
+        $config += '\.'
+    }
+    $relaunchArgs = @('-c', ('"{0}"' -f $config))
+}
+
 function Start-App {
+    $description = (@($Relaunch) + $relaunchArgs) -join ' '
     if ($NoRelaunch) {
-        Write-Log 'relaunch skipped (-NoRelaunch)'
+        Write-Log "relaunch skipped (-NoRelaunch): $description"
         return
     }
     try {
-        Start-Process -FilePath $Relaunch -WorkingDirectory $AppDir -ErrorAction Stop
-        Write-Log "relaunched $Relaunch"
+        if ($relaunchArgs.Count -gt 0) {
+            Start-Process -FilePath $Relaunch -ArgumentList $relaunchArgs -WorkingDirectory $AppDir -ErrorAction Stop
+        } else {
+            Start-Process -FilePath $Relaunch -WorkingDirectory $AppDir -ErrorAction Stop
+        }
+        Write-Log "relaunched $description"
     } catch {
         Write-Log "relaunch failed: $($_.Exception.Message)"
     }
 }
 
-# miroir de app et runtime, puis fichiers racine sans suppression ; codes robocopy 0-7 : succès, 8 et plus : échec
+# robocopy du système, par son chemin complet
+$robocopy = Join-Path $env:SystemRoot 'System32\robocopy.exe'
+
+# miroir de app et runtime, puis fichiers racine sans suppression ; codes robocopy 0-7 : succès, 8 et plus : échec, la
+# suite n'est pas copiée (pas de runtime ni d'exe neufs sur une image incomplète). Renvoie $true si tout a été copié.
 function Copy-AppImage {
     foreach ($sub in @('app', 'runtime')) {
         $src = Join-Path $NewDir $sub
@@ -63,21 +86,22 @@ function Copy-AppImage {
             Write-Log "robocopy $sub skipped: $src missing"
             continue
         }
-        & robocopy $src $dst /MIR /R:2 /W:1 /NP /NJH /NJS | Out-Null
+        & $robocopy $src $dst /MIR /R:2 /W:1 /NP /NJH /NJS | Out-Null
         $code = $LASTEXITCODE
         if ($code -ge 8) {
-            Write-Log "robocopy $sub failed (code $code)"
-        } else {
-            Write-Log "robocopy $sub done (code $code)"
+            Write-Log "robocopy $sub failed (code $code), copy stopped"
+            return $false
         }
+        Write-Log "robocopy $sub done (code $code)"
     }
-    & robocopy $NewDir $AppDir /LEV:1 /R:2 /W:1 /NP /NJH /NJS | Out-Null
+    & $robocopy $NewDir $AppDir /LEV:1 /R:2 /W:1 /NP /NJH /NJS | Out-Null
     $code = $LASTEXITCODE
     if ($code -ge 8) {
-        Write-Log "robocopy root files failed (code $code)"
-    } else {
-        Write-Log "robocopy root files done (code $code)"
+        Write-Log "robocopy root files failed (code $code), copy stopped"
+        return $false
     }
+    Write-Log "robocopy root files done (code $code)"
+    return $true
 }
 
 function Test-Writable([string]$dir) {
@@ -142,21 +166,32 @@ function Remove-TempDir {
 if ($CopyOnly) {
     # relance élevée : copie seulement, la relance et le nettoyage restent au script non élevé
     Write-Log 'elevated copy started'
-    Copy-AppImage
-    Write-Log 'elevated copy finished'
-    exit 0
+    if (Copy-AppImage) {
+        Write-Log 'elevated copy finished'
+        exit 0
+    }
+    Write-Log 'elevated copy failed'
+    exit 2
 }
 
 Write-Log "Update started (pid $AppPid, app $AppDir, new $NewDir)"
 
-# 1. attente de la fin de l'application et de tout processus lancé depuis son dossier (60 s en tout)
+# 1. attente de la fin de l'application et de tout processus lancé depuis son dossier (60 s en tout) ; un processus
+# synoRight / synoRightGui dont le chemin est illisible (instance élevée) compte comme lancé depuis ce dossier
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
 Wait-Process -Id $AppPid -Timeout 60 -ErrorAction SilentlyContinue
 $prefix = $AppDir + '\'
+$appNames = @('synoRight', 'synoRightGui')
 $running = @()
 do {
     $running = @(Get-Process -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -and $_.Path.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) })
+        Where-Object {
+            if ($_.Path) {
+                $_.Path.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+            } else {
+                $appNames -contains $_.ProcessName
+            }
+        })
     if ($running.Count -eq 0) {
         break
     }
@@ -171,8 +206,9 @@ if ($running.Count -gt 0 -or (Get-Process -Id $AppPid -ErrorAction SilentlyConti
 Write-Log 'synoRight has exited'
 
 # 2. copie, élevée si le dossier de l'appli n'est pas modifiable
+$copied = $false
 if (Test-Writable $AppDir) {
-    Copy-AppImage
+    $copied = Copy-AppImage
 } else {
     Write-Log 'application folder not writable, requesting elevation'
     $quoted = { param($value) '"{0}"' -f $value }
@@ -181,6 +217,7 @@ if (Test-Writable $AppDir) {
     try {
         $elevated = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $argList -Verb RunAs -Wait -PassThru -ErrorAction Stop
         Write-Log "elevated copy ended (code $($elevated.ExitCode))"
+        $copied = $elevated.ExitCode -eq 0
     } catch {
         # UAC refusée ou échec : rien n'a été copié, l'ancienne version est relancée telle quelle
         Write-Log "elevation declined or failed: $($_.Exception.Message)"
@@ -191,8 +228,12 @@ if (Test-Writable $AppDir) {
     }
 }
 
-# 3. relance (jamais élevée) puis nettoyage
+# 3. relance (jamais élevée) puis nettoyage ; copie interrompue : relance quand même (pas de retour arrière automatique)
 Start-App
 Remove-TempDir
+if (-not $copied) {
+    Write-Log 'Update failed: copy stopped after a robocopy error, the application may be incomplete'
+    exit 1
+}
 Write-Log 'Update finished'
 exit 0

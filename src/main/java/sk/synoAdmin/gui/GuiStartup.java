@@ -11,7 +11,10 @@ import javax.swing.JProgressBar;
 
 import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.i18n.Messages;
+import sk.synoAdmin.menu.Launchers;
 import sk.synoAdmin.menu.MenuRepair;
+import sk.synoAdmin.menu.ModernMenuInstaller;
+import sk.synoAdmin.update.PortableUpdate;
 
 /**
  * Tâches de démarrage de l'IHM, avant l'ouverture de la première fenêtre.
@@ -22,10 +25,35 @@ final class GuiStartup {
 		// utility
 	}
 
-	/** Initialisation commune à toutes les sous-commandes graphiques : Swing, puis réparation éventuelle des menus. */
+	/**
+	 * Initialisation commune à toutes les sous-commandes graphiques : Swing, réparation éventuelle des menus, puis
+	 * nettoyage en tâche de fond.
+	 */
 	static void setupGui() {
 		Gui.setup();
 		repairMenus();
+		startCleanup();
+	}
+
+	/**
+	 * Nettoyage hors du chemin critique (thread démon, jamais attendu, erreurs journalisées en debug) : dossiers temporaires
+	 * de mise à jour abandonnés, anciennes DLL du menu laissées par la mise à jour d'une copie portable.
+	 */
+	static void startCleanup() {
+		final Thread thread = new Thread(() -> {
+			try {
+				PortableUpdate.deleteStaleTempDirs();
+			} catch (final RuntimeException e) {
+				LogUtil.debug("Nettoyage des dossiers temporaires : " + e);
+			}
+			try {
+				Launchers.appDir().ifPresent(ModernMenuInstaller::deleteStaleDllsAtStartup);
+			} catch (final RuntimeException e) {
+				LogUtil.debug("Nettoyage des anciennes DLL du menu : " + e);
+			}
+		}, "synoRight-startup-cleanup");
+		thread.setDaemon(true);
+		thread.start();
 	}
 
 	/**

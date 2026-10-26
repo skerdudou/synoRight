@@ -552,7 +552,8 @@ final class ConfigWindow {
 	/**
 	 * Mettre à jour : application installée par l'installeur ⇒ fermeture (comme le bouton Fermer), téléchargement avec
 	 * progression, lancement de l'installeur puis arrêt ; copie portable (zip) ⇒ refus si d'autres fenêtres synoRight sont
-	 * ouvertes, fermeture, téléchargement du zip, décompression et lancement du script de remplacement puis arrêt ; sinon
+	 * ouvertes, accord administrateur annoncé (avec possibilité de renoncer) si son dossier n'est pas modifiable,
+	 * fermeture, téléchargement du zip, décompression et lancement du script de remplacement puis arrêt ; sinon
 	 * page de la release dans le navigateur. Un fichier sans empreinte publiée est refusé avant toute question.
 	 */
 	private void installUpdate() {
@@ -586,20 +587,34 @@ final class ConfigWindow {
 			JOptionPane.showMessageDialog(frame, Messages.get("gui.busy"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
-		// recherche des autres instances (liste des processus) hors de l'EDT
-		Gui.runAsync(frame.getContentPane(), () -> PortableUpdate.otherInstances(appDir.get()).size(), others -> {
-			if (others > 0) {
-				JOptionPane.showMessageDialog(frame, Messages.get("update.portable.otherInstances", others), Gui.TITLE,
+		// recherche des autres instances (liste des processus) et test d'écriture dans le dossier, hors de l'EDT
+		Gui.runAsync(frame.getContentPane(), () -> new PortableCheck(PortableUpdate.otherInstances(appDir.get()).size(),
+				PortableUpdate.isWritable(appDir.get())), check -> {
+			// fenêtre fermée pendant la recherche : plus rien à faire
+			if (!frame.isDisplayable()) {
+				return;
+			}
+			if (check.others() > 0) {
+				JOptionPane.showMessageDialog(frame, Messages.get("update.portable.otherInstances", check.others()), Gui.TITLE,
 						JOptionPane.INFORMATION_MESSAGE);
+				return;
+			}
+			// dossier non modifiable : le script demandera l'accord d'un administrateur, l'utilisateur peut renoncer
+			if (!check.writable() && JOptionPane.showConfirmDialog(frame, Messages.get("update.portable.needsAdmin"), Gui.TITLE,
+					JOptionPane.OK_CANCEL_OPTION, JOptionPane.INFORMATION_MESSAGE) != JOptionPane.OK_OPTION) {
 				return;
 			}
 			if (confirmClose()) {
 				downloadAndApply(release, asset.get(), fileName, (dir, zip) -> {
 					final Path newDir = PortableUpdate.extract(zip, dir);
-					PortableUpdate.start(dir, newDir, appDir.get(), configDir);
+					PortableUpdate.start(dir, newDir, appDir.get(), configDir, configDir);
 				});
 			}
 		});
+	}
+
+	/** Copie portable : nombre d'autres instances lancées depuis son dossier, dossier modifiable par l'utilisateur. */
+	private record PortableCheck(int others, boolean writable) {
 	}
 
 	/** Étape exécutée hors de l'EDT après un téléchargement réussi : lance la mise à jour (exception si impossible). */
@@ -648,7 +663,7 @@ final class ConfigWindow {
 		async(() -> {
 			Path dir = null;
 			try {
-				dir = Files.createTempDirectory("synoRight-update-");
+				dir = Files.createTempDirectory(PortableUpdate.TEMP_PREFIX);
 				final Path file = Updater.download(asset, fileName, dir, length -> SwingUtilities.invokeLater(() -> {
 					if (length > 0 && length <= Integer.MAX_VALUE) {
 						bar.setIndeterminate(false);

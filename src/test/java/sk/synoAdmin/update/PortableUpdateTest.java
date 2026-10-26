@@ -132,7 +132,7 @@ class PortableUpdateTest {
 		final Path newDir = Files.createDirectories(tmp.resolve("elsewhere/synoRight"));
 
 		assertThrows(IllegalArgumentException.class,
-				() -> PortableUpdate.start(temp, newDir, tmp.resolve("app"), tmp.resolve("logs")));
+				() -> PortableUpdate.start(temp, newDir, tmp.resolve("app"), tmp.resolve("logs"), tmp.resolve("config")));
 		assertFalse(Files.exists(temp.resolve("apply-update.ps1")));
 	}
 
@@ -164,6 +164,50 @@ class PortableUpdateTest {
 	}
 
 	@Test
+	void otherInstancesCountsASynoRightProcessWhoseCommandIsHiddenButCommandLineKnown() {
+		final Path appDir = tmp.resolve("app");
+		final Stream<ProcessHandle> handles = Stream.of(
+				new FakeProcess(2, Optional.empty(), Optional.of("SYNORIGHTGUI.EXE -c x")), // dossier invérifiable
+				new FakeProcess(3, Optional.empty(), Optional.of("notepad.exe")), // autre programme
+				new FakeProcess(4, Optional.empty(), Optional.of(" ")), // ligne vide
+				new FakeProcess(5, Optional.of(tmp.resolve("other/synoRight.exe").toString()),
+						Optional.of("synoRight.exe"))); // commande connue, autre dossier : la ligne n'est pas consultée
+
+		final List<Long> found = PortableUpdate.otherInstances(appDir, 1, handles).stream().map(ProcessHandle::pid).toList();
+
+		assertEquals(List.of(2L), found);
+	}
+
+	@Test
+	void isWritableIsTrueForAWritableFolderAndLeavesNothingBehind() throws IOException {
+		final Path dir = Files.createDirectory(tmp.resolve("app"));
+
+		assertTrue(PortableUpdate.isWritable(dir));
+		try (Stream<Path> files = Files.list(dir)) {
+			assertEquals(0, files.count());
+		}
+	}
+
+	@Test
+	void isWritableIsFalseForAMissingFolder() {
+		assertFalse(PortableUpdate.isWritable(tmp.resolve("missing")));
+	}
+
+	@Test
+	void staleTempDirsKeepsRecentFoldersAndOtherNames() {
+		final Instant now = Instant.parse("2026-10-26T12:00:00Z");
+		final Map<String, Instant> dirs = Map.of(
+				"synoRight-update-1", now.minus(Duration.ofDays(3)), // abandonné
+				"synoRight-update-2", now.minus(Duration.ofHours(25)), // plus d'un jour
+				"synoRight-update-3", now.minus(Duration.ofHours(2)), // du jour : un script peut s'en servir
+				"synoRight-update-4", now.minus(Duration.ofDays(1)), // exactement un jour : gardé
+				"other-update-1", now.minus(Duration.ofDays(10)), // autre préfixe
+				"synoRight-repair.lock", now.minus(Duration.ofDays(10)));
+
+		assertEquals(List.of("synoRight-update-1", "synoRight-update-2"), PortableUpdate.staleTempDirs(dirs, now));
+	}
+
+	@Test
 	void otherInstancesOnTheRealProcessesIgnoresTheCurrentProcess() {
 		final Path javaHome = Path.of(System.getProperty("java.home"));
 		assertTrue(PortableUpdate.otherInstances(javaHome).stream()
@@ -177,11 +221,12 @@ class PortableUpdateTest {
 		final Path newDir = Path.of("C:/Temp/synoRight-update-1/synoRight");
 		final Path relaunch = appDir.resolve("synoRightGui.exe");
 		final Path logDir = Path.of("C:/Users/me/AppData/Roaming/synoRight");
+		final Path configDir = Path.of("D:/my config");
 
 		assertEquals(List.of(PortableUpdate.powershell().toString(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
 				script.toString(), "-AppPid", "1234", "-AppDir", appDir.toString(), "-NewDir", newDir.toString(), "-Relaunch",
-				relaunch.toString(), "-LogDir", logDir.toString()),
-				PortableUpdate.scriptCommand(script, 1234, appDir, newDir, relaunch, logDir));
+				relaunch.toString(), "-LogDir", logDir.toString(), "-ConfigDir", configDir.toString()),
+				PortableUpdate.scriptCommand(script, 1234, appDir, newDir, relaunch, logDir, configDir));
 	}
 
 	@Test
@@ -208,7 +253,11 @@ class PortableUpdateTest {
 	}
 
 	/** Processus simulé : seuls le pid et la commande servent. */
-	private record FakeProcess(long pid, Optional<String> command) implements ProcessHandle {
+	private record FakeProcess(long pid, Optional<String> command, Optional<String> commandLine) implements ProcessHandle {
+
+		FakeProcess(final long pid, final Optional<String> command) {
+			this(pid, command, command);
+		}
 
 		@Override
 		public Optional<ProcessHandle> parent() {
@@ -235,7 +284,7 @@ class PortableUpdateTest {
 
 				@Override
 				public Optional<String> commandLine() {
-					return command;
+					return commandLine;
 				}
 
 				@Override

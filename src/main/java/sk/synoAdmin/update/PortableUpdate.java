@@ -9,15 +9,21 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
+import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.i18n.Messages;
 
@@ -31,6 +37,10 @@ public final class PortableUpdate {
 	/** Dossier racine du zip publié par la CI. */
 	static final String ROOT = "synoRight";
 	static final String GUI_EXE = "synoRightGui.exe";
+	/** Préfixe des dossiers temporaires de mise à jour (dans java.io.tmpdir). */
+	public static final String TEMP_PREFIX = "synoRight-update-";
+	/** Âge à partir duquel un dossier temporaire de mise à jour est abandonné (aucun script ne s'en sert plus). */
+	private static final Duration TEMP_MAX_AGE = Duration.ofDays(1);
 	private static final String SCRIPT = "apply-update.ps1";
 	private static final String SCRIPT_RESOURCE = "/update/" + SCRIPT;
 
@@ -115,19 +125,32 @@ public final class PortableUpdate {
 		return destination;
 	}
 
-	/** Autres processus lancés depuis appDir (fenêtres des droits, synchronisation…), hors processus courant. */
+	/**
+	 * Autres processus lancés depuis appDir (fenêtres des droits, synchronisation…), hors processus courant. Limite : une
+	 * instance élevée cache son exécutable ; sous Windows le JDK ne fournit alors ni commande ni ligne de commande, elle
+	 * n'est donc pas vue ici. Le script de remplacement la repère par son nom pendant son attente et abandonne (relance de
+	 * l'ancienne version, rien n'est remplacé).
+	 */
 	public static List<ProcessHandle> otherInstances(final Path appDir) {
 		try (Stream<ProcessHandle> processes = ProcessHandle.allProcesses()) {
 			return otherInstances(appDir, ProcessHandle.current().pid(), processes);
 		}
 	}
 
-	/** Processus de la liste lancés depuis appDir (comparaison insensible à la casse), hors selfPid. */
+	/**
+	 * Processus de la liste lancés depuis appDir (comparaison insensible à la casse), hors selfPid ; sans commande connue,
+	 * un processus dont la ligne de commande (si fournie) contient « synoRight » compte aussi (dossier invérifiable).
+	 */
 	public static List<ProcessHandle> otherInstances(final Path appDir, final long selfPid, final Stream<ProcessHandle> processes) {
 		final String prefix = key(appDir.toAbsolutePath().normalize().toString()) + key(File.separator);
 		return processes.filter(p -> p.pid() != selfPid)
-				.filter(p -> command(p).map(c -> key(c).startsWith(prefix)).orElse(false))
+				.filter(p -> command(p).map(c -> key(c).startsWith(prefix))
+						.orElseGet(() -> commandLine(p).map(c -> key(c).contains(key(ROOT))).orElse(false)))
 				.toList();
+	}
+
+	private static Optional<String> commandLine(final ProcessHandle process) {
+		return process.info().commandLine().filter(c -> !c.isBlank());
 	}
 
 	// commande normalisée du processus, vide si inconnue (processus d'un autre utilisateur, déjà terminé…)
@@ -143,12 +166,80 @@ public final class PortableUpdate {
 		return path.toLowerCase(Locale.ROOT);
 	}
 
-	/** Ligne de commande du script de remplacement (arguments séparés : chemins avec espaces sans souci). */
+	/**
+	 * Ligne de commande du script de remplacement (arguments séparés : chemins avec espaces sans souci) ; configDir est
+	 * repassé par -c à l'application relancée.
+	 */
 	public static List<String> scriptCommand(final Path script, final long pid, final Path appDir, final Path newDir,
-			final Path relaunch, final Path logDir) {
+			final Path relaunch, final Path logDir, final Path configDir) {
 		return List.of(powershell().toString(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
 				script.toString(), "-AppPid", Long.toString(pid), "-AppDir", appDir.toString(), "-NewDir", newDir.toString(),
-				"-Relaunch", relaunch.toString(), "-LogDir", logDir.toString());
+				"-Relaunch", relaunch.toString(), "-LogDir", logDir.toString(), "-ConfigDir", configDir.toString());
+	}
+
+	/**
+	 * Vrai si l'utilisateur peut écrire dans dir (fichier témoin créé puis supprimé) ; faux : le script demandera l'accord
+	 * d'un administrateur pour la copie.
+	 */
+	public static boolean isWritable(final Path dir) {
+		try {
+			final Path probe = Files.createTempFile(dir, ".update-probe-", ".tmp");
+			Files.deleteIfExists(probe);
+			return true;
+		} catch (final IOException | SecurityException | UnsupportedOperationException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Noms des dossiers temporaires de mise à jour abandonnés : préfixe {@link #TEMP_PREFIX}, modifiés il y a plus d'un
+	 * jour (les plus récents peuvent encore servir à un script en cours).
+	 *
+	 * @param dirs dossiers de java.io.tmpdir (nom, date de modification)
+	 */
+	static List<String> staleTempDirs(final Map<String, Instant> dirs, final Instant now) {
+		final Instant limit = now.minus(TEMP_MAX_AGE);
+		return dirs.entrySet().stream()
+				.filter(e -> e.getKey().startsWith(TEMP_PREFIX) && e.getValue().isBefore(limit))
+				.map(Map.Entry::getKey)
+				.sorted()
+				.toList();
+	}
+
+	/** Supprime, au mieux, les dossiers temporaires de mise à jour abandonnés de java.io.tmpdir (erreurs journalisées en debug). */
+	public static void deleteStaleTempDirs() {
+		final Path tmp = Path.of(System.getProperty("java.io.tmpdir"));
+		final Map<String, Instant> dirs = new HashMap<>();
+		try (Stream<Path> files = Files.list(tmp)) {
+			files.filter(f -> f.getFileName().toString().startsWith(TEMP_PREFIX) && Files.isDirectory(f)).forEach(f -> {
+				try {
+					dirs.put(f.getFileName().toString(), Files.getLastModifiedTime(f).toInstant());
+				} catch (final IOException e) {
+					LogUtil.debug("Date de " + f + " illisible : " + e);
+				}
+			});
+		} catch (final IOException | UncheckedIOException e) {
+			LogUtil.debug("Dossier temporaire " + tmp + " illisible : " + e);
+			return;
+		}
+		for (final String name : staleTempDirs(dirs, Instant.now())) {
+			deleteTree(tmp.resolve(name));
+		}
+	}
+
+	// suppression récursive au mieux : un fichier verrouillé reste, le reste est supprimé
+	private static void deleteTree(final Path dir) {
+		try (Stream<Path> paths = Files.walk(dir)) {
+			paths.sorted(Comparator.reverseOrder()).forEach(p -> {
+				try {
+					Files.deleteIfExists(p);
+				} catch (final IOException e) {
+					LogUtil.debug("Suppression de " + p + " : " + e);
+				}
+			});
+		} catch (final IOException | UncheckedIOException e) {
+			LogUtil.debug("Suppression de " + dir + " : " + e);
+		}
 	}
 
 	/** PowerShell du système (chemin complet : pas de powershell.exe trouvé ailleurs dans le PATH), « powershell » à défaut. */
@@ -172,14 +263,15 @@ public final class PortableUpdate {
 
 	/**
 	 * Copie le script dans tempDir (le dossier temporaire de la mise à jour, parent de newDir, supprimé par le script) et
-	 * le lance détaché, sans attendre : l'appelant doit quitter ensuite pour que le script puisse remplacer les fichiers.
+	 * le lance détaché (journal dans logDir, relance avec -c configDir), sans attendre : l'appelant doit quitter ensuite
+	 * pour que le script puisse remplacer les fichiers.
 	 * Appelée seulement depuis le processus de l'interface (synoRightGui.exe, sans console) : le script, lancé caché,
 	 * n'hérite d'aucune console à fermer.
 	 *
 	 * @throws IllegalArgumentException si newDir n'est pas directement dans tempDir (le script ne supprime que son propre
 	 *         dossier)
 	 */
-	public static void start(final Path tempDir, final Path newDir, final Path appDir, final Path logDir) {
+	public static void start(final Path tempDir, final Path newDir, final Path appDir, final Path logDir, final Path configDir) {
 		final Path parent = newDir.toAbsolutePath().normalize().getParent();
 		if (parent == null || !parent.equals(tempDir.toAbsolutePath().normalize())) {
 			throw new IllegalArgumentException(newDir + " is not directly in " + tempDir);
@@ -188,7 +280,7 @@ public final class PortableUpdate {
 			Files.createDirectories(logDir);
 			final Path script = copyScript(tempDir);
 			final List<String> command = scriptCommand(script, ProcessHandle.current().pid(), appDir, newDir,
-					appDir.resolve(GUI_EXE), logDir);
+					appDir.resolve(GUI_EXE), logDir, configDir.toAbsolutePath().normalize());
 			new ProcessBuilder(command).redirectOutput(Redirect.DISCARD).redirectError(Redirect.DISCARD).start();
 		} catch (final IOException | UncheckedIOException e) {
 			throw new UserException(Messages.get("update.portable.launchFailed", e.toString()), e);

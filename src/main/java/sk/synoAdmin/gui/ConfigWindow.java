@@ -97,10 +97,12 @@ final class ConfigWindow {
 	private static final int GROUPS = 2;
 	private static final int MENU = 3;
 	private static final int SYNC = 4;
+	private static final int UPDATES = 5;
 
 	/** Noms de la liste des sections, dans l'ordre des index ci-dessus (nom = identifiant de la carte). */
 	private final String[] sections = { Messages.get("gui.config.section.connection"), Messages.get("gui.config.section.folder"),
-			Messages.get("gui.config.section.groups"), Messages.get("gui.config.section.menu"), Messages.get("gui.config.section.sync") };
+			Messages.get("gui.config.section.groups"), Messages.get("gui.config.section.menu"), Messages.get("gui.config.section.sync"),
+			Messages.get("gui.config.section.updates") };
 
 	/** Paramètres d'un test de connexion, relevés sur l'EDT. */
 	private record ConnectionParams(String url, String user, String password, boolean passwordFromConfig, boolean sameAccount,
@@ -239,6 +241,7 @@ final class ConfigWindow {
 		cardPanel.add(menuSection(), sections[MENU]);
 		// tâches de la synchronisation dans la file de la fenêtre : jamais pendant un enregistrement ou une installation
 		cardPanel.add(new SyncPanel(() -> saved, SyncPlan.Direction.PUSH, this::queue), sections[SYNC]);
+		cardPanel.add(updatesSection(), sections[UPDATES]);
 
 		// sections indisponibles : grisées et non sélectionnables
 		sectionList.setSelectionModel(new DefaultListSelectionModel() {
@@ -272,6 +275,8 @@ final class ConfigWindow {
 			}
 		});
 		enabledSections[CONNECTION] = true;
+		// réglages de l'application : accessibles sans configuration
+		enabledSections[UPDATES] = true;
 		sectionList.setSelectedIndex(CONNECTION);
 		final JScrollPane sectionScroll = new JScrollPane(sectionList);
 		sectionScroll.setPreferredSize(new java.awt.Dimension(180, 0));
@@ -297,21 +302,11 @@ final class ConfigWindow {
 		final JButton openDir = new JButton(Messages.get("gui.config.openDir"));
 		openDir.putClientProperty("JButton.buttonType", "borderless");
 		openDir.addActionListener(e -> openConfigDir());
-		final JLabel version = new JLabel(new SynoRightCommand.VersionProvider().getVersion()[0]);
-		version.setEnabled(false);
 
 		final JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
 		left.add(openDir);
 		left.add(new JLabel(Messages.get("gui.config.language.label")));
 		left.add(languageBox());
-		left.add(version);
-		// version de développement : pas de recherche de mise à jour
-		if (AppVersion.current().isPresent()) {
-			final JButton check = new JButton(Messages.get("update.button.check"));
-			check.putClientProperty("JButton.buttonType", "borderless");
-			check.addActionListener(e -> checkForUpdate());
-			left.add(check);
-		}
 		final JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		right.add(save);
 		right.add(close);
@@ -968,13 +963,36 @@ final class ConfigWindow {
 		final JPanel buttons = leftFlow(install, uninstall);
 		buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
 		content.add(buttons);
-		// réglage de l'application (pas de section générale) : recherche d'une nouvelle version à l'ouverture
+		return section(Messages.get("gui.config.menu.title"), Messages.get("gui.config.menu.description"), content);
+	}
+
+	// ---------------------------------------------------------------- Mises à jour
+
+	/** Version installée, recherche d'une nouvelle version à l'ouverture et à la demande. */
+	private JPanel updatesSection() {
+		final JPanel content = new JPanel();
+		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+		final JPanel version = leftFlow(new JLabel(new SynoRightCommand.VersionProvider().getVersion()[0]));
+		version.setAlignmentX(Component.LEFT_ALIGNMENT);
+		content.add(version);
 		final JCheckBox updateCheck = new JCheckBox(Messages.get("gui.config.updateCheck"), form.updateCheck);
 		updateCheck.addActionListener(e -> form.updateCheck = updateCheck.isSelected());
-		updateCheck.setBorder(BorderFactory.createEmptyBorder(16, 0, 0, 0));
 		updateCheck.setAlignmentX(Component.LEFT_ALIGNMENT);
 		content.add(updateCheck);
-		return section(Messages.get("gui.config.menu.title"), Messages.get("gui.config.menu.description"), content);
+		// version de développement : pas de recherche de mise à jour
+		if (AppVersion.current().isPresent()) {
+			final JButton check = new JButton(Messages.get("update.button.check"));
+			check.addActionListener(e -> checkForUpdate());
+			final JPanel buttons = leftFlow(check);
+			buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
+			content.add(buttons);
+		} else {
+			updateCheck.setEnabled(false);
+			final JPanel dev = leftFlow(new JLabel(Messages.get("update.cli.devVersion")));
+			dev.setAlignmentX(Component.LEFT_ALIGNMENT);
+			content.add(dev);
+		}
+		return section(Messages.get("gui.config.updates.title"), Messages.get("gui.config.updates.description"), content);
 	}
 
 	/** Case d'une entrée pour le menu Windows 11 (modern) ou le menu classique. */

@@ -98,7 +98,9 @@ class TrustedCertificateTest {
 
 	@Test
 	void autreEmpreinte_refusee() {
-		final String other = "00:" + TrustedCertificate.fingerprint(serverCertificate).substring(3);
+		final String real = TrustedCertificate.fingerprint(serverCertificate);
+		// premier octet toujours différent du vrai (le certificat aléatoire peut commencer par 00)
+		final String other = (real.startsWith("00") ? "01" : "00") + real.substring(2);
 
 		assertThrows(UserException.class, () -> client(other).login());
 	}

@@ -10,8 +10,8 @@
 
 # Mise à jour d'une copie portable de synoRight : attend la fin de l'application, remplace seulement l'image de
 # l'application (app et runtime en miroir, fichiers racine copiés sans rien supprimer), relance l'application puis
-# supprime le dossier temporaire (parent de NewDir). La configuration posée à côté de l'exe, l'ancienne DLL du menu et
-# tout fichier de l'utilisateur restent. Journal en anglais (fichier technique) : LogDir\update.log.
+# supprime le dossier temporaire (parent de NewDir, qui doit être le dossier du script). La configuration posée à côté
+# de l'exe, l'ancienne DLL du menu et tout fichier de l'utilisateur restent. Journal en anglais (fichier technique) : LogDir\update.log.
 # -CopyOnly : copie seule (relance élevée quand le dossier n'est pas modifiable) ; -NoRelaunch : pour les tests.
 
 $ErrorActionPreference = 'Continue'
@@ -104,10 +104,24 @@ function Test-Deletable([string]$folder) {
     return -not $AppDir.StartsWith($full + '\', [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+# cmd.exe du système, par son chemin complet
+function Get-Cmd {
+    if ($env:ComSpec) {
+        return $env:ComSpec
+    }
+    return Join-Path $env:SystemRoot 'System32\cmd.exe'
+}
+
 function Remove-TempDir {
     $temp = Get-FullPath (Split-Path -Parent $NewDir)
     if (-not (Test-Deletable $temp)) {
         Write-Log "Refusing to delete $temp (drive root, the application folder or one of its parents)"
+        return
+    }
+    # seul le dossier du script (le dossier temporaire de la mise à jour) peut être supprimé
+    $scriptDir = Get-FullPath (Split-Path -Parent $PSCommandPath)
+    if (-not $scriptDir.Equals($temp, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-Log "Refusing to delete $temp (not the folder of this script, $scriptDir)"
         return
     }
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
@@ -115,7 +129,7 @@ function Remove-TempDir {
         # le script tourne depuis ce dossier : suppression différée, au mieux
         try {
             $cmd = '/c timeout /t 2 /nobreak >nul & rmdir /s /q "{0}"' -f $temp
-            Start-Process -FilePath 'cmd.exe' -ArgumentList $cmd -WindowStyle Hidden -ErrorAction Stop
+            Start-Process -FilePath (Get-Cmd) -ArgumentList $cmd -WindowStyle Hidden -ErrorAction Stop
             Write-Log "temporary folder $temp partly removed, removal of the rest scheduled"
         } catch {
             Write-Log "cleanup of $temp failed: $($_.Exception.Message)"
@@ -165,7 +179,7 @@ if (Test-Writable $AppDir) {
     $argList = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File {0} -AppPid {1} -AppDir {2} -NewDir {3} -Relaunch {4} -LogDir {5} -CopyOnly' -f `
         (& $quoted $PSCommandPath), $AppPid, (& $quoted $AppDir), (& $quoted $NewDir), (& $quoted $Relaunch), (& $quoted $LogDir)
     try {
-        $elevated = Start-Process -FilePath 'powershell' -ArgumentList $argList -Verb RunAs -Wait -PassThru -ErrorAction Stop
+        $elevated = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $argList -Verb RunAs -Wait -PassThru -ErrorAction Stop
         Write-Log "elevated copy ended (code $($elevated.ExitCode))"
     } catch {
         # UAC refusée ou échec : rien n'a été copié, l'ancienne version est relancée telle quelle

@@ -125,4 +125,21 @@ class ApplyUpdateScriptTest {
 		assertTrue(Files.exists(script));
 		assertTrue(log().contains("Refusing to delete"), log());
 	}
+
+	@Test
+	void neverDeletesAFolderOtherThanTheScriptFolder() throws Exception {
+		oldVersion();
+		final Path scripts = Files.createDirectories(tmp.resolve("scripts"));
+		final Path script = PortableUpdate.copyScript(scripts);
+		// le dossier « temporaire » (parent de newDir) n'est pas celui du script
+		final Path other = Files.createDirectories(tmp.resolve("other"));
+		final Path newDir = newVersion(other.resolve("synoRight"));
+
+		run(script, newDir);
+
+		assertReplaced();
+		assertTrue(Files.exists(newDir.resolve("synoRightGui.exe")));
+		assertTrue(Files.exists(script));
+		assertTrue(log().contains("Refusing to delete"), log());
+	}
 }

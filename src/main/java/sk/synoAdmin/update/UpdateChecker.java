@@ -16,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import sk.synoAdmin.AppVersion;
+import sk.synoAdmin.LogUtil;
 import sk.synoAdmin.UserException;
 import sk.synoAdmin.i18n.Messages;
 import sk.synoAdmin.menu.ProcessRunner;
@@ -97,13 +98,18 @@ public final class UpdateChecker {
 
 	/**
 	 * Lance la vérification puis enregistre la date, que la vérification ait réussi ou non ; l'échec est relancé tel quel.
+	 * L'enregistrement est au mieux : son échec est seulement journalisé (il ne masque ni le résultat ni l'erreur).
 	 */
 	public static Release checkAndRecord(final Supplier<Release> fetch, final Consumer<Instant> record,
 			final Supplier<Instant> clock) {
 		try {
 			return fetch.get();
 		} finally {
-			record.accept(clock.get());
+			try {
+				record.accept(clock.get());
+			} catch (final RuntimeException e) {
+				LogUtil.debug("Enregistrement de la date de vérification : " + e);
+			}
 		}
 	}
 

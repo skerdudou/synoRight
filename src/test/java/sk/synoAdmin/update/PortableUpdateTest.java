@@ -104,6 +104,39 @@ class PortableUpdateTest {
 	}
 
 	@Test
+	void extractRefusesAZipWithoutApp() throws IOException {
+		final Path zip = zip("synoRight/synoRightGui.exe", "exe", "synoRight/app/", null, "synoRight/runtime/bin/java.dll", "dll");
+		final Path target = Files.createDirectory(tmp.resolve("out"));
+
+		assertThrows(UserException.class, () -> PortableUpdate.extract(zip, target));
+	}
+
+	@Test
+	void extractRefusesAZipWithoutRuntime() throws IOException {
+		final Path zip = zip("synoRight/synoRightGui.exe", "exe", "synoRight/app/synoRight.jar", "jar");
+		final Path target = Files.createDirectory(tmp.resolve("out"));
+
+		assertThrows(UserException.class, () -> PortableUpdate.extract(zip, target));
+	}
+
+	@Test
+	void badZipMessageWithoutExceptionMessage() {
+		final UserException e = PortableUpdate.badZip(new java.util.zip.ZipException());
+		assertTrue(e.getMessage().contains("ZipException"), e.getMessage());
+		assertFalse(e.getMessage().contains("null"), e.getMessage());
+	}
+
+	@Test
+	void startRefusesANewFolderOutsideTheTemporaryFolder() throws IOException {
+		final Path temp = Files.createDirectory(tmp.resolve("synoRight-update-1"));
+		final Path newDir = Files.createDirectories(tmp.resolve("elsewhere/synoRight"));
+
+		assertThrows(IllegalArgumentException.class,
+				() -> PortableUpdate.start(temp, newDir, tmp.resolve("app"), tmp.resolve("logs")));
+		assertFalse(Files.exists(temp.resolve("apply-update.ps1")));
+	}
+
+	@Test
 	void extractRefusesACorruptedZip() throws IOException {
 		final Path zip = Files.writeString(tmp.resolve("update.zip"), "not a zip");
 		final Path target = Files.createDirectory(tmp.resolve("out"));
@@ -145,10 +178,20 @@ class PortableUpdateTest {
 		final Path relaunch = appDir.resolve("synoRightGui.exe");
 		final Path logDir = Path.of("C:/Users/me/AppData/Roaming/synoRight");
 
-		assertEquals(List.of("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
+		assertEquals(List.of(PortableUpdate.powershell().toString(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
 				script.toString(), "-AppPid", "1234", "-AppDir", appDir.toString(), "-NewDir", newDir.toString(), "-Relaunch",
 				relaunch.toString(), "-LogDir", logDir.toString()),
 				PortableUpdate.scriptCommand(script, 1234, appDir, newDir, relaunch, logDir));
+	}
+
+	@Test
+	void powershellIsTheSystemOneWhenSystemRootIsKnown() {
+		final String systemRoot = System.getenv("SystemRoot");
+		if (systemRoot == null) {
+			assertEquals(Path.of("powershell"), PortableUpdate.powershell());
+		} else {
+			assertEquals(Path.of(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), PortableUpdate.powershell());
+		}
 	}
 
 	@Test

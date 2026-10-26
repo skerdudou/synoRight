@@ -40,7 +40,8 @@ public final class PortableUpdate {
 
 	/**
 	 * Décompresse zip dans targetDir et renvoie targetDir/synoRight. Refuse (sans rien écrire hors de targetDir) toute
-	 * entrée dont le chemin sort de targetDir, ainsi qu'un zip sans dossier synoRight contenant synoRightGui.exe.
+	 * entrée dont le chemin sort de targetDir, ainsi qu'un zip sans dossier synoRight contenant synoRightGui.exe et des
+	 * dossiers app et runtime non vides.
 	 */
 	public static Path extract(final Path zip, final Path targetDir) {
 		final Path target = targetDir.toAbsolutePath().normalize();
@@ -64,7 +65,7 @@ public final class PortableUpdate {
 				}
 			}
 		} catch (final ZipException e) {
-			throw new UserException(Messages.get("update.portable.badZip", e.getMessage()), e);
+			throw badZip(e);
 		} catch (final IOException e) {
 			throw new UserException(Messages.get("update.portable.badZip", e.toString()), e);
 		}
@@ -72,7 +73,29 @@ public final class PortableUpdate {
 		if (!Files.isRegularFile(root.resolve(GUI_EXE))) {
 			throw new UserException(Messages.get("update.portable.badZip", ROOT + "/" + GUI_EXE));
 		}
+		// app et runtime sont remplacés en miroir : vides ou absents, l'application serait détruite
+		for (final String sub : List.of("app", "runtime")) {
+			if (isEmptyOrMissing(root.resolve(sub))) {
+				throw new UserException(Messages.get("update.portable.badZip", ROOT + "/" + sub + "/"));
+			}
+		}
 		return root;
+	}
+
+	/** Archive illisible : message de l'exception, ou son type quand elle n'en a pas. */
+	static UserException badZip(final ZipException e) {
+		return new UserException(Messages.get("update.portable.badZip", e.getMessage() != null ? e.getMessage() : e.toString()), e);
+	}
+
+	private static boolean isEmptyOrMissing(final Path dir) {
+		if (!Files.isDirectory(dir)) {
+			return true;
+		}
+		try (Stream<Path> children = Files.list(dir)) {
+			return children.findAny().isEmpty();
+		} catch (final IOException | UncheckedIOException e) {
+			throw new UserException(Messages.get("update.portable.badZip", e.toString()), e);
+		}
 	}
 
 	// chemin de l'entrée dans target, refusé s'il est absolu ou en sort (zip slip)
@@ -123,9 +146,16 @@ public final class PortableUpdate {
 	/** Ligne de commande du script de remplacement (arguments séparés : chemins avec espaces sans souci). */
 	public static List<String> scriptCommand(final Path script, final long pid, final Path appDir, final Path newDir,
 			final Path relaunch, final Path logDir) {
-		return List.of("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
+		return List.of(powershell().toString(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
 				script.toString(), "-AppPid", Long.toString(pid), "-AppDir", appDir.toString(), "-NewDir", newDir.toString(),
 				"-Relaunch", relaunch.toString(), "-LogDir", logDir.toString());
+	}
+
+	/** PowerShell du système (chemin complet : pas de powershell.exe trouvé ailleurs dans le PATH), « powershell » à défaut. */
+	static Path powershell() {
+		final String systemRoot = System.getenv("SystemRoot");
+		return systemRoot == null || systemRoot.isBlank() ? Path.of("powershell")
+				: Path.of(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 	}
 
 	/** Copie le script (octet pour octet, BOM compris) dans dir et renvoie son chemin. */
@@ -143,8 +173,17 @@ public final class PortableUpdate {
 	/**
 	 * Copie le script dans tempDir (le dossier temporaire de la mise à jour, parent de newDir, supprimé par le script) et
 	 * le lance détaché, sans attendre : l'appelant doit quitter ensuite pour que le script puisse remplacer les fichiers.
+	 * Appelée seulement depuis le processus de l'interface (synoRightGui.exe, sans console) : le script, lancé caché,
+	 * n'hérite d'aucune console à fermer.
+	 *
+	 * @throws IllegalArgumentException si newDir n'est pas directement dans tempDir (le script ne supprime que son propre
+	 *         dossier)
 	 */
 	public static void start(final Path tempDir, final Path newDir, final Path appDir, final Path logDir) {
+		final Path parent = newDir.toAbsolutePath().normalize().getParent();
+		if (parent == null || !parent.equals(tempDir.toAbsolutePath().normalize())) {
+			throw new IllegalArgumentException(newDir + " is not directly in " + tempDir);
+		}
 		try {
 			Files.createDirectories(logDir);
 			final Path script = copyScript(tempDir);

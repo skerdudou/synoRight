@@ -126,6 +126,25 @@ class UpdateCheckerTest {
 	}
 
 	@Test
+	void checkAndRecordKeepsTheCheckErrorWhenRecordingFails() {
+		final UserException failure = new UserException("boom");
+		final UserException thrown = assertThrows(UserException.class, () -> UpdateChecker.checkAndRecord(() -> {
+			throw failure;
+		}, when -> {
+			throw new IllegalStateException("registry");
+		}, Instant::now));
+		assertSame(failure, thrown);
+	}
+
+	@Test
+	void checkAndRecordReturnsTheReleaseWhenRecordingFails() {
+		final Release release = new Release("0.4", "u", Optional.empty(), Optional.empty());
+		assertSame(release, UpdateChecker.checkAndRecord(() -> release, when -> {
+			throw new IllegalStateException("registry");
+		}, Instant::now));
+	}
+
+	@Test
 	void parseLastCheck() {
 		final String out = "\r\nHKEY_CURRENT_USER\\Software\\synoRight\\Update\r\n    LastCheck    REG_SZ    1761393600\r\n";
 		assertEquals(Optional.of(Instant.ofEpochSecond(1761393600L)), UpdateChecker.parseLastCheck(out));

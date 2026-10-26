@@ -6,12 +6,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -95,9 +95,21 @@ public final class UpdateChecker {
 		return last.isEmpty() || last.get().isAfter(now) || !last.get().plus(CHECK_INTERVAL).isAfter(now);
 	}
 
-	/** Vrai si l'application a été installée par l'installeur (présence du désinstalleur dans son dossier). */
-	public static boolean installedBySetup(final Optional<Path> appDir) {
-		return appDir.isPresent() && Files.exists(appDir.get().resolve("unins000.exe"));
+	/**
+	 * Lance la vérification puis enregistre la date, que la vérification ait réussi ou non ; l'échec est relancé tel quel.
+	 */
+	public static Release checkAndRecord(final Supplier<Release> fetch, final Consumer<Instant> record,
+			final Supplier<Instant> clock) {
+		try {
+			return fetch.get();
+		} finally {
+			record.accept(clock.get());
+		}
+	}
+
+	/** Vérification sur GitHub avec enregistrement de la date dans le registre (réussie ou non). */
+	public static Release fetchLatestAndRecord() {
+		return checkAndRecord(UpdateChecker::fetchLatest, UpdateChecker::markChecked, Instant::now);
 	}
 
 	/** Date de la dernière vérification (registre) ; vide si absente ou hors Windows. */

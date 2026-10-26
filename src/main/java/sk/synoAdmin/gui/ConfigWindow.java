@@ -14,6 +14,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -509,9 +511,7 @@ final class ConfigWindow {
 				if (!UpdateChecker.dueForCheck(UpdateChecker.lastCheck(), Instant.now())) {
 					return Optional.empty();
 				}
-				final Release release = UpdateChecker.fetchLatest();
-				UpdateChecker.markChecked(Instant.now());
-				return Optional.of(release);
+				return Optional.of(UpdateChecker.fetchLatestAndRecord());
 			}
 
 			@Override
@@ -530,11 +530,7 @@ final class ConfigWindow {
 	/** Bouton de la barre du bas : recherche immédiate, résultat toujours affiché (bandeau, « à jour » ou erreur). */
 	private void checkForUpdate() {
 		final String current = AppVersion.current().orElseThrow();
-		async(() -> {
-			final Release release = UpdateChecker.fetchLatest();
-			UpdateChecker.markChecked(Instant.now());
-			return release;
-		}, release -> {
+		async(UpdateChecker::fetchLatestAndRecord, release -> {
 			if (UpdateChecker.newer(release, current)) {
 				showUpdate(release);
 			} else {
@@ -558,7 +554,8 @@ final class ConfigWindow {
 	 */
 	private void installUpdate() {
 		final Release release = latest;
-		if (Updater.mode(release, UpdateChecker.installedBySetup(Launchers.appDir())) == Updater.Mode.OPEN_PAGE) {
+		// le mode portable n'est pas encore branché : page de la release
+		if (Updater.mode(release, Launchers.appDir()) != Updater.Mode.INSTALL) {
 			openReleasePage(release.pageUrl());
 			return;
 		}
@@ -594,17 +591,20 @@ final class ConfigWindow {
 		dialog.setSize(400, dialog.getPreferredSize().height);
 		dialog.setLocationRelativeTo(frame);
 		dialog.setVisible(true);
-		final Path dir = Path.of(System.getProperty("java.io.tmpdir"));
 		// la fenêtre est désactivée et ne peut être fermée pendant le téléchargement (file de la fenêtre) ;
 		// l'erreur est rendue dans le résultat pour fermer la progression avant de l'afficher
 		async(() -> {
+			Path dir = null;
 			try {
-				final Path setup = Updater.download(release, dir, length -> SwingUtilities.invokeLater(() -> {
-					if (length > 0 && length <= Integer.MAX_VALUE) {
-						bar.setIndeterminate(false);
-						bar.setMaximum((int) length);
-					}
-				}), read -> SwingUtilities.invokeLater(() -> bar.setValue((int) Math.min(read, Integer.MAX_VALUE))), cancelled::get);
+				dir = Files.createTempDirectory("synoRight-update-");
+				final Path setup = Updater.download(release.setup().orElseThrow(), "synoRight-" + release.version() + "-setup.exe", dir,
+						length -> SwingUtilities.invokeLater(() -> {
+							if (length > 0 && length <= Integer.MAX_VALUE) {
+								bar.setIndeterminate(false);
+								bar.setMaximum((int) length);
+							}
+						}), read -> SwingUtilities.invokeLater(() -> bar.setValue((int) Math.min(read, Integer.MAX_VALUE))),
+						cancelled::get);
 				try {
 					Updater.launch(setup);
 				} catch (final IOException e) {
@@ -612,9 +612,12 @@ final class ConfigWindow {
 				}
 				return new UpdateOutcome(true, null);
 			} catch (final Updater.DownloadCancelledException e) {
+				deleteTree(dir);
 				return new UpdateOutcome(false, null);
-			} catch (final RuntimeException e) {
-				return new UpdateOutcome(false, e);
+			} catch (final IOException | RuntimeException e) {
+				deleteTree(dir);
+				return new UpdateOutcome(false, e instanceof final RuntimeException runtime ? runtime
+						: new UserException(Messages.get("update.download.error", e.toString()), e));
 			}
 		}, outcome -> {
 			dialog.dispose();
@@ -629,6 +632,18 @@ final class ConfigWindow {
 			}
 			// annulation : retour à la fenêtre, sans message
 		}, dialog::dispose);
+	}
+
+	// dossier temporaire de téléchargement : suppression sans erreur (le fichier est rendu à l'installeur seulement en cas de succès)
+	private static void deleteTree(final Path dir) {
+		if (dir == null) {
+			return;
+		}
+		try (Stream<Path> paths = Files.walk(dir)) {
+			paths.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+		} catch (final IOException | UncheckedIOException e) {
+			LogUtil.debug("Suppression du dossier temporaire : " + e);
+		}
 	}
 
 	private void openReleasePage(final String url) {

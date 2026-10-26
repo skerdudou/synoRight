@@ -2,6 +2,7 @@ package sk.synoAdmin.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,14 +10,13 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -27,34 +27,37 @@ class UpdateCheckerTest {
 	private static final String JSON = """
 			{"tag_name":"v0.4","html_url":"https://github.com/skerdudou/synoRight/releases/tag/v0.4",
 			 "assets":[
-			  {"name":"synoRight-0.4.zip","browser_download_url":"https://example.com/synoRight-0.4.zip","digest":"sha256:ffff"},
-			  {"name":"synoRight-0.4-setup.exe","browser_download_url":"https://example.com/synoRight-0.4-setup.exe","digest":"sha256:ab12"}
+			  {"name":"synoRight-0.4.zip","browser_download_url":"https://example.com/synoRight-0.4.zip","size":9,"digest":"sha256:ffff"},
+			  {"name":"synoRight-0.4-setup.exe","browser_download_url":"https://example.com/synoRight-0.4-setup.exe","size":1234,"digest":"sha256:ab12"},
+			  {"name":"synoRight-0.4-windows-x64.zip","browser_download_url":"https://example.com/synoRight-0.4-windows-x64.zip","size":5678,"digest":"sha256:cd34"}
 			 ]}""";
 
 	@Test
-	void parseFullRelease() {
+	void parseFullReleaseWithSetupAndZip() {
 		final Release release = Release.parse(JSON);
 		assertEquals("0.4", release.version());
 		assertEquals("https://github.com/skerdudou/synoRight/releases/tag/v0.4", release.pageUrl());
-		assertEquals(Optional.of("https://example.com/synoRight-0.4-setup.exe"), release.setupUrl());
-		assertEquals(Optional.of("ab12"), release.setupSha256());
+		assertEquals(Optional.of(new Release.Asset("https://example.com/synoRight-0.4-setup.exe", 1234, Optional.of("ab12"))),
+				release.setup());
+		assertEquals(Optional.of(new Release.Asset("https://example.com/synoRight-0.4-windows-x64.zip", 5678, Optional.of("cd34"))),
+				release.zip());
 	}
 
 	@Test
-	void parseWithoutSetupNorDigest() {
+	void parseAssetWithoutShaDigestHasNoChecksum() {
 		final Release release = Release.parse("""
-				{"tag_name":"v0.4","html_url":"u","assets":[{"name":"synoRight-0.4.zip","browser_download_url":"z"}]}""");
-		assertEquals(Optional.empty(), release.setupUrl());
-		assertEquals(Optional.empty(), release.setupSha256());
-		assertEquals(Optional.empty(), Release.parse("{\"tag_name\":\"v0.4\",\"html_url\":\"u\"}").setupUrl());
+				{"tag_name":"0.5","html_url":"u","assets":[
+				 {"name":"synoRight-0.5-setup.exe","browser_download_url":"s","size":10},
+				 {"name":"synoRight-0.5-windows-x64.zip","browser_download_url":"z","size":20,"digest":"md5:12"}]}""");
+		assertEquals(Optional.of(new Release.Asset("s", 10, Optional.empty())), release.setup());
+		assertEquals(Optional.of(new Release.Asset("z", 20, Optional.empty())), release.zip());
 	}
 
 	@Test
-	void parseSetupWithoutShaDigest() {
-		final Release release = Release.parse("""
-				{"tag_name":"0.5","html_url":"u","assets":[{"name":"synoRight-0.5-setup.exe","browser_download_url":"s","digest":"md5:12"}]}""");
-		assertEquals(Optional.of("s"), release.setupUrl());
-		assertEquals(Optional.empty(), release.setupSha256());
+	void parseWithoutAssets() {
+		final Release release = Release.parse("{\"tag_name\":\"v0.4\",\"html_url\":\"u\"}");
+		assertEquals(Optional.empty(), release.setup());
+		assertEquals(Optional.empty(), release.zip());
 	}
 
 	@Test
@@ -65,11 +68,13 @@ class UpdateCheckerTest {
 	}
 
 	@Test
-	void parseSetupWithoutDownloadUrl() {
+	void parseIgnoresAssetWithoutUrlOrSize() {
 		final Release release = Release.parse("""
-				{"tag_name":"0.5","html_url":"u","assets":[{"name":"synoRight-0.5-setup.exe","browser_download_url":" ","digest":"sha256:ab"}]}""");
-		assertEquals(Optional.empty(), release.setupUrl());
-		assertEquals(Optional.empty(), release.setupSha256());
+				{"tag_name":"0.5","html_url":"u","assets":[
+				 {"name":"synoRight-0.5-setup.exe","browser_download_url":" ","size":10,"digest":"sha256:ab"},
+				 {"name":"synoRight-0.5-windows-x64.zip","browser_download_url":"z","digest":"sha256:ab"}]}""");
+		assertEquals(Optional.empty(), release.setup());
+		assertEquals(Optional.empty(), release.zip());
 	}
 
 	@Test
@@ -100,11 +105,24 @@ class UpdateCheckerTest {
 	}
 
 	@Test
-	void installedBySetup(@TempDir final Path dir) throws IOException {
-		assertFalse(UpdateChecker.installedBySetup(Optional.empty()));
-		assertFalse(UpdateChecker.installedBySetup(Optional.of(dir)));
-		Files.createFile(dir.resolve("unins000.exe"));
-		assertTrue(UpdateChecker.installedBySetup(Optional.of(dir)));
+	void checkAndRecordRecordsDateAfterSuccess() {
+		final Instant now = Instant.parse("2026-10-26T10:00:00Z");
+		final List<Instant> recorded = new ArrayList<>();
+		final Release release = new Release("0.4", "u", Optional.empty(), Optional.empty());
+		assertSame(release, UpdateChecker.checkAndRecord(() -> release, recorded::add, () -> now));
+		assertEquals(List.of(now), recorded);
+	}
+
+	@Test
+	void checkAndRecordRecordsDateEvenWhenCheckFails() {
+		final Instant now = Instant.parse("2026-10-26T10:00:00Z");
+		final List<Instant> recorded = new ArrayList<>();
+		final UserException failure = new UserException("boom");
+		final UserException thrown = assertThrows(UserException.class, () -> UpdateChecker.checkAndRecord(() -> {
+			throw failure;
+		}, recorded::add, () -> now));
+		assertSame(failure, thrown);
+		assertEquals(List.of(now), recorded);
 	}
 
 	@Test

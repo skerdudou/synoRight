@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -22,6 +21,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.AfterEach;
@@ -36,9 +36,11 @@ import sk.synoAdmin.UserException;
 class UpdaterTest {
 
 	private static final byte[] SETUP = "contenu de l'installeur".getBytes(StandardCharsets.UTF_8);
+	private static final String FILE = "synoRight-0.5-setup.exe";
 
 	// libère les réponses bloquées en fin de test
 	private final CountDownLatch release = new CountDownLatch(1);
+	private final AtomicInteger hits = new AtomicInteger();
 	private HttpServer server;
 	private String base;
 
@@ -46,12 +48,14 @@ class UpdaterTest {
 	void startServer() throws IOException {
 		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
 		server.createContext("/setup.exe", exchange -> {
+			hits.incrementAndGet();
 			exchange.sendResponseHeaders(200, SETUP.length);
 			exchange.getResponseBody().write(SETUP);
 			exchange.close();
 		});
 		// en-têtes et début du fichier, puis plus rien
 		server.createContext("/stall", exchange -> {
+			hits.incrementAndGet();
 			exchange.sendResponseHeaders(200, 1000);
 			exchange.getResponseBody().write(new byte[10]);
 			exchange.getResponseBody().flush();
@@ -63,6 +67,7 @@ class UpdaterTest {
 			exchange.close();
 		});
 		server.createContext("/missing", exchange -> {
+			hits.incrementAndGet();
 			exchange.sendResponseHeaders(404, -1);
 			exchange.close();
 		});
@@ -81,17 +86,44 @@ class UpdaterTest {
 		return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
 	}
 
-	private Release release(final String path, final Optional<String> sha) {
-		return new Release("0.5", "https://github.com/skerdudou/synoRight/releases/tag/v0.5", Optional.of(base + path), sha);
+	private Release.Asset asset(final String path, final long size, final Optional<String> sha) {
+		return new Release.Asset(base + path, size, sha);
+	}
+
+	private static Path download(final Release.Asset asset, final Path dir) {
+		return Updater.download(asset, FILE, dir, l -> {
+			// rien
+		}, p -> {
+			// rien
+		}, () -> false);
+	}
+
+	private static Release releaseWith(final Optional<Release.Asset> setup, final Optional<Release.Asset> zip) {
+		return new Release("0.5", "u", setup, zip);
 	}
 
 	@Test
-	void modeInstallSeulementAvecSetupEtAsset() {
-		final Release withSetup = new Release("0.5", "u", Optional.of("s"), Optional.empty());
-		final Release withoutSetup = new Release("0.5", "u", Optional.empty(), Optional.empty());
-		assertEquals(Updater.Mode.INSTALL, Updater.mode(withSetup, true));
-		assertEquals(Updater.Mode.OPEN_PAGE, Updater.mode(withoutSetup, true));
-		assertEquals(Updater.Mode.OPEN_PAGE, Updater.mode(withSetup, false));
+	void modeInstallAvecDesinstalleurEtSetup(@TempDir final Path dir) throws IOException {
+		Files.createFile(dir.resolve("unins000.exe"));
+		final Release.Asset any = new Release.Asset("s", 1, Optional.of("00"));
+		assertEquals(Updater.Mode.INSTALL, Updater.mode(releaseWith(Optional.of(any), Optional.empty()), Optional.of(dir)));
+		assertEquals(Updater.Mode.OPEN_PAGE, Updater.mode(releaseWith(Optional.empty(), Optional.of(any)), Optional.of(dir)));
+	}
+
+	@Test
+	void modePortableSansDesinstalleurAvecExeEtZip(@TempDir final Path dir) throws IOException {
+		Files.createFile(dir.resolve("synoRightGui.exe"));
+		final Release.Asset any = new Release.Asset("z", 1, Optional.of("00"));
+		assertEquals(Updater.Mode.PORTABLE, Updater.mode(releaseWith(Optional.empty(), Optional.of(any)), Optional.of(dir)));
+		assertEquals(Updater.Mode.OPEN_PAGE, Updater.mode(releaseWith(Optional.of(any), Optional.empty()), Optional.of(dir)));
+	}
+
+	@Test
+	void modeOpenPageSansExeOuSansDossier(@TempDir final Path dir) {
+		final Release.Asset any = new Release.Asset("z", 1, Optional.of("00"));
+		final Release both = releaseWith(Optional.of(any), Optional.of(any));
+		assertEquals(Updater.Mode.OPEN_PAGE, Updater.mode(both, Optional.of(dir)));
+		assertEquals(Updater.Mode.OPEN_PAGE, Updater.mode(both, Optional.empty()));
 	}
 
 	@Test
@@ -102,39 +134,49 @@ class UpdaterTest {
 	}
 
 	@Test
-	void downloadBonneEmpreinte(@TempDir final Path dir) throws Exception {
+	void downloadBonneEmpreinteEtTaille(@TempDir final Path dir) throws Exception {
 		final AtomicLong progress = new AtomicLong();
 		// empreinte en majuscules : comparaison sans casse
-		final Path file = Updater.download(release("/setup.exe", Optional.of(sha256(SETUP).toUpperCase())), dir, progress::set);
-		assertEquals(dir.resolve("synoRight-0.5-setup.exe"), file);
+		final Path file = Updater.download(asset("/setup.exe", SETUP.length, Optional.of(sha256(SETUP).toUpperCase())), FILE, dir,
+				l -> {
+					// rien
+				}, progress::set, () -> false);
+		assertEquals(dir.resolve(FILE), file);
 		assertArrayEquals(SETUP, Files.readAllBytes(file));
 		assertEquals(SETUP.length, progress.get());
 	}
 
 	@Test
-	void downloadSansEmpreinte(@TempDir final Path dir) throws IOException {
-		final Path file = Updater.download(release("/setup.exe", Optional.empty()), dir, p -> {
-			// rien
-		});
-		assertArrayEquals(SETUP, Files.readAllBytes(file));
+	void downloadSansEmpreinte_refuseSansAppelAuServeur(@TempDir final Path dir) {
+		final UserException e = assertThrows(UserException.class,
+				() -> download(asset("/setup.exe", SETUP.length, Optional.empty()), dir));
+		assertEquals("The update file has no published checksum: download refused.", e.getMessage());
+		assertEquals(0, hits.get());
+		assertFalse(Files.exists(dir.resolve(FILE)));
+	}
+
+	@Test
+	void downloadMauvaiseTaille_fichierSupprime(@TempDir final Path dir) throws Exception {
+		final String sha = sha256(SETUP);
+		final UserException e = assertThrows(UserException.class,
+				() -> download(asset("/setup.exe", SETUP.length + 5, Optional.of(sha)), dir));
+		assertEquals("The downloaded file does not have the expected size (" + SETUP.length + " bytes instead of "
+				+ (SETUP.length + 5) + ").", e.getMessage());
+		assertFalse(Files.exists(dir.resolve(FILE)));
 	}
 
 	@Test
 	void downloadMauvaiseEmpreinte_fichierSupprime(@TempDir final Path dir) {
 		final UserException e = assertThrows(UserException.class,
-				() -> Updater.download(release("/setup.exe", Optional.of("00ff")), dir, p -> {
-					// rien
-				}));
+				() -> download(asset("/setup.exe", SETUP.length, Optional.of("00ff")), dir));
 		assertEquals("The downloaded file is corrupted (checksum mismatch). Please try again.", e.getMessage());
-		assertFalse(Files.exists(dir.resolve("synoRight-0.5-setup.exe")));
+		assertFalse(Files.exists(dir.resolve(FILE)));
 	}
 
 	@Test
 	void downloadErreurHttp(@TempDir final Path dir) throws IOException {
 		final UserException e = assertThrows(UserException.class,
-				() -> Updater.download(release("/missing", Optional.empty()), dir, p -> {
-					// rien
-				}));
+				() -> download(asset("/missing", 1, Optional.of("00")), dir));
 		assertEquals("Could not download the update (HTTP 404).", e.getMessage());
 		try (var files = Files.list(dir)) {
 			assertEquals(0, files.count());
@@ -145,7 +187,7 @@ class UpdaterTest {
 	void downloadBloque_echoueApresLeDelai(@TempDir final Path dir) {
 		final UserException e = assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
 			final UserException thrown = assertThrows(UserException.class,
-					() -> Updater.download(release("/stall", Optional.empty()), dir, l -> {
+					() -> Updater.download(asset("/stall", 1000, Optional.of("00")), FILE, dir, l -> {
 						// rien
 					}, p -> {
 						// rien
@@ -155,16 +197,16 @@ class UpdaterTest {
 			return thrown;
 		});
 		assertEquals("The download stopped responding. Please try again.", e.getMessage());
-		assertFalse(Files.exists(dir.resolve("synoRight-0.5-setup.exe")));
+		assertFalse(Files.exists(dir.resolve(FILE)));
 	}
 
 	@Test
 	void downloadAnnule_fichierSupprime(@TempDir final Path dir) {
 		final AtomicBoolean cancelled = new AtomicBoolean();
 		assertTimeoutPreemptively(Duration.ofSeconds(5), () -> assertThrows(Updater.DownloadCancelledException.class,
-				() -> Updater.download(release("/stall", Optional.empty()), dir, l -> {
+				() -> Updater.download(asset("/stall", 1000, Optional.of("00")), FILE, dir, l -> {
 					// rien
 				}, p -> cancelled.set(true), cancelled::get)));
-		assertFalse(Files.exists(dir.resolve("synoRight-0.5-setup.exe")));
+		assertFalse(Files.exists(dir.resolve(FILE)));
 	}
 }

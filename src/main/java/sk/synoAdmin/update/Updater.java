@@ -13,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -23,14 +24,17 @@ import sk.synoAdmin.UserException;
 import sk.synoAdmin.i18n.Messages;
 
 /**
- * Mise à jour vers une nouvelle version : choix du mode (installeur ou page de la release), téléchargement de l'installeur
- * avec vérification de son empreinte SHA-256, puis lancement en mode silencieux.
+ * Mise à jour vers une nouvelle version : choix du mode (installeur, zip portable ou page de la release), téléchargement
+ * avec contrôle de la taille et de l'empreinte SHA-256, puis lancement de l'installeur en mode silencieux.
  */
 public final class Updater {
 
-	/** Mise à jour possible : installation par l'installeur téléchargé, ou page de la release dans le navigateur. */
+	/**
+	 * Mise à jour possible : installation par l'installeur téléchargé, remplacement du dossier portable par le zip, ou page
+	 * de la release dans le navigateur.
+	 */
 	public enum Mode {
-		INSTALL, OPEN_PAGE
+		INSTALL, PORTABLE, OPEN_PAGE
 	}
 
 	private static final int BUFFER_SIZE = 64 * 1024;
@@ -41,9 +45,20 @@ public final class Updater {
 		// utility
 	}
 
-	/** INSTALL seulement si l'application a été installée par l'installeur et que la release en fournit un. */
-	public static Mode mode(final Release release, final boolean installedBySetup) {
-		return installedBySetup && release.setupUrl().isPresent() ? Mode.INSTALL : Mode.OPEN_PAGE;
+	/**
+	 * INSTALL si l'application a été installée par l'installeur (désinstalleur présent) et que la release en fournit un ;
+	 * PORTABLE si elle tourne depuis un dossier sans désinstalleur contenant synoRightGui.exe et que la release fournit le
+	 * zip ; sinon (jar, fichier manquant) OPEN_PAGE.
+	 */
+	public static Mode mode(final Release release, final Optional<Path> appDir) {
+		if (appDir.isEmpty()) {
+			return Mode.OPEN_PAGE;
+		}
+		if (Files.exists(appDir.get().resolve("unins000.exe"))) {
+			return release.setup().isPresent() ? Mode.INSTALL : Mode.OPEN_PAGE;
+		}
+		return release.zip().isPresent() && Files.exists(appDir.get().resolve("synoRightGui.exe")) ? Mode.PORTABLE
+				: Mode.OPEN_PAGE;
 	}
 
 	/** Ligne de commande de l'installeur : mise à jour silencieuse, fermeture puis relance de l'application. */
@@ -57,40 +72,35 @@ public final class Updater {
 	}
 
 	/**
-	 * Télécharge l'installeur de la release dans dir.
-	 *
-	 * @param progress reçoit le nombre d'octets lus jusque-là
-	 */
-	public static Path download(final Release release, final Path dir, final LongConsumer progress) {
-		return download(release, dir, length -> {
-			// taille inutile ici
-		}, progress, () -> false);
-	}
-
-	/**
-	 * Télécharge l'installeur de la release dans dir et vérifie son empreinte SHA-256 si la release en fournit une ;
-	 * fichier supprimé si le téléchargement échoue, est annulé ou si l'empreinte ne correspond pas. Abandon si les en-têtes
-	 * de la réponse n'arrivent pas en 30 s, ou si plus aucun octet n'arrive pendant 60 s.
+	 * Télécharge le fichier dans dir sous le nom fileName et le contrôle strictement : sans empreinte publiée, refus avant
+	 * tout téléchargement ; fichier supprimé si le téléchargement échoue, est annulé, si la taille reçue n'est pas celle
+	 * annoncée ou si l'empreinte SHA-256 ne correspond pas. Abandon si les en-têtes de la réponse n'arrivent pas en 30 s,
+	 * ou si plus aucun octet n'arrive pendant 60 s.
 	 *
 	 * @param length reçoit la taille annoncée par le serveur (-1 si inconnue), avant le premier octet
 	 * @param progress reçoit le nombre d'octets lus jusque-là
 	 * @param cancelled vrai pour annuler (consulté régulièrement depuis un autre thread)
 	 * @throws DownloadCancelledException après une annulation
 	 */
-	public static Path download(final Release release, final Path dir, final LongConsumer length, final LongConsumer progress,
-			final BooleanSupplier cancelled) {
-		return download(release, dir, length, progress, cancelled, RESPONSE_TIMEOUT, STALL_TIMEOUT);
+	public static Path download(final Release.Asset asset, final String fileName, final Path dir, final LongConsumer length,
+			final LongConsumer progress, final BooleanSupplier cancelled) {
+		return download(asset, fileName, dir, length, progress, cancelled, RESPONSE_TIMEOUT, STALL_TIMEOUT);
 	}
 
-	static Path download(final Release release, final Path dir, final LongConsumer length, final LongConsumer progress,
-			final BooleanSupplier cancelled, final Duration responseTimeout, final Duration stallTimeout) {
-		final URI uri = URI.create(release.setupUrl().orElseThrow());
-		final Path target = dir.resolve("synoRight-" + release.version() + "-setup.exe");
+	static Path download(final Release.Asset asset, final String fileName, final Path dir, final LongConsumer length,
+			final LongConsumer progress, final BooleanSupplier cancelled, final Duration responseTimeout,
+			final Duration stallTimeout) {
+		if (asset.sha256().isEmpty()) {
+			throw new UserException(Messages.get("update.download.noDigest"));
+		}
+		final URI uri = URI.create(asset.url());
+		final Path target = dir.resolve(fileName);
 		final HttpRequest request = HttpRequest.newBuilder(uri).timeout(responseTimeout)
 				.header("User-Agent", UpdateChecker.userAgent()).GET().build();
 		final MessageDigest digest = sha256();
 		final Watchdog watchdog = new Watchdog(Thread.currentThread(), cancelled, stallTimeout);
 		Exception error = null;
+		long received = 0;
 		try {
 			final HttpResponse<InputStream> response = UpdateChecker.httpClient().send(request, HttpResponse.BodyHandlers.ofInputStream());
 			watchdog.activity();
@@ -101,14 +111,13 @@ public final class Updater {
 				length.accept(response.headers().firstValueAsLong("Content-Length").orElse(-1));
 				try (OutputStream out = Files.newOutputStream(target)) {
 					final byte[] buffer = new byte[BUFFER_SIZE];
-					long total = 0;
 					int read;
 					while ((read = in.read(buffer)) != -1) {
 						watchdog.activity();
 						out.write(buffer, 0, read);
 						digest.update(buffer, 0, read);
-						total += read;
-						progress.accept(total);
+						received += read;
+						progress.accept(received);
 					}
 				}
 			}
@@ -120,8 +129,11 @@ public final class Updater {
 			deleteQuietly(target);
 			throw failure(reason, error);
 		}
-		if (release.setupSha256().isPresent()
-				&& !HexFormat.of().formatHex(digest.digest()).equalsIgnoreCase(release.setupSha256().get())) {
+		if (received != asset.size()) {
+			deleteQuietly(target);
+			throw new UserException(Messages.get("update.download.badSize", received, asset.size()));
+		}
+		if (!HexFormat.of().formatHex(digest.digest()).equalsIgnoreCase(asset.sha256().get())) {
 			deleteQuietly(target);
 			throw new UserException(Messages.get("update.download.badDigest"));
 		}

@@ -127,6 +127,20 @@ class UpdaterTest {
 	}
 
 	@Test
+	void assetAndFileNameDependOnTheMode() {
+		final Release.Asset setup = new Release.Asset("s", 1, Optional.of("00"));
+		final Release.Asset zip = new Release.Asset("z", 1, Optional.of("00"));
+		final Release release = releaseWith(Optional.of(setup), Optional.of(zip));
+
+		assertEquals(Optional.of(setup), Updater.asset(release, Updater.Mode.INSTALL));
+		assertEquals("synoRight-0.5-setup.exe", Updater.fileName(release, Updater.Mode.INSTALL));
+		assertEquals(Optional.of(zip), Updater.asset(release, Updater.Mode.PORTABLE));
+		assertEquals("synoRight-0.5-windows-x64.zip", Updater.fileName(release, Updater.Mode.PORTABLE));
+		assertEquals(Optional.empty(), Updater.asset(release, Updater.Mode.OPEN_PAGE));
+		assertThrows(IllegalArgumentException.class, () -> Updater.fileName(release, Updater.Mode.OPEN_PAGE));
+	}
+
+	@Test
 	void setupCommand() {
 		final Path setup = Path.of("C:\\Temp\\synoRight-0.5-setup.exe");
 		assertEquals(List.of(setup.toString(), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/RELAUNCH"),

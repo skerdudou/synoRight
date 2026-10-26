@@ -28,8 +28,18 @@ public record Release(String version, String pageUrl, Optional<Asset> setup, Opt
 		if (version.isBlank()) {
 			throw new IllegalArgumentException("tag_name absent");
 		}
-		return new Release(version, root.path("html_url").asString(""), asset(root, "synoRight-" + version + "-setup.exe"),
-				asset(root, "synoRight-" + version + "-windows-x64.zip"));
+		return new Release(version, root.path("html_url").asString(""), asset(root, setupName(version)),
+				asset(root, zipName(version)));
+	}
+
+	/** Nom publié de l'installeur de la version. */
+	static String setupName(final String version) {
+		return "synoRight-" + version + "-setup.exe";
+	}
+
+	/** Nom publié du zip portable de la version. */
+	static String zipName(final String version) {
+		return "synoRight-" + version + "-windows-x64.zip";
 	}
 
 	// sans adresse ni taille, le fichier ne peut pas être contrôlé : il est ignoré

@@ -83,6 +83,7 @@ import sk.synoAdmin.prefs.Preferences;
 import sk.synoAdmin.prefs.Session;
 import sk.synoAdmin.synology.ConnectionCheck;
 import sk.synoAdmin.synology.SynoGroup;
+import sk.synoAdmin.update.PortableUpdate;
 import sk.synoAdmin.update.Release;
 import sk.synoAdmin.update.UpdateChecker;
 import sk.synoAdmin.update.Updater;
@@ -128,7 +129,7 @@ final class ConfigWindow {
 	private record Installed(String message, MenuService.Status status) {
 	}
 
-	/** Mise à jour : installeur lancé, ou erreur (null si annulée ou réussie). */
+	/** Mise à jour : installeur ou script de remplacement lancé, ou erreur (null si annulée ou réussie). */
 	private record UpdateOutcome(boolean launched, RuntimeException error) {
 	}
 
@@ -550,18 +551,69 @@ final class ConfigWindow {
 
 	/**
 	 * Mettre à jour : application installée par l'installeur ⇒ fermeture (comme le bouton Fermer), téléchargement avec
-	 * progression, lancement de l'installeur puis arrêt ; sinon page de la release dans le navigateur.
+	 * progression, lancement de l'installeur puis arrêt ; copie portable (zip) ⇒ refus si d'autres fenêtres synoRight sont
+	 * ouvertes, fermeture, téléchargement du zip, décompression et lancement du script de remplacement puis arrêt ; sinon
+	 * page de la release dans le navigateur. Un fichier sans empreinte publiée est refusé avant toute question.
 	 */
 	private void installUpdate() {
 		final Release release = latest;
-		// le mode portable n'est pas encore branché : page de la release
-		if (Updater.mode(release, Launchers.appDir()) != Updater.Mode.INSTALL) {
+		final Optional<Path> appDir = Launchers.appDir();
+		final Updater.Mode mode = Updater.mode(release, appDir);
+		final Optional<Release.Asset> asset = Updater.asset(release, mode);
+		if (asset.isEmpty()) {
 			openReleasePage(release.pageUrl());
 			return;
 		}
-		if (!confirmClose()) {
+		if (asset.get().sha256().isEmpty()) {
+			Gui.showError(frame, new UserException(Messages.get("update.download.noDigest")));
 			return;
 		}
+		final String fileName = Updater.fileName(release, mode);
+		if (mode == Updater.Mode.INSTALL) {
+			if (confirmClose()) {
+				downloadAndApply(release, asset.get(), fileName, (dir, setup) -> {
+					try {
+						Updater.launch(setup);
+					} catch (final IOException e) {
+						throw new UserException(Messages.get("update.launch.failed", e.getMessage()), e);
+					}
+				});
+			}
+			return;
+		}
+		// PORTABLE : fenêtre occupée ⇒ refus d'emblée (même message que confirmClose), avant toute recherche
+		if (busy) {
+			JOptionPane.showMessageDialog(frame, Messages.get("gui.busy"), Gui.TITLE, JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		// recherche des autres instances (liste des processus) hors de l'EDT
+		Gui.runAsync(frame.getContentPane(), () -> PortableUpdate.otherInstances(appDir.get()).size(), others -> {
+			if (others > 0) {
+				JOptionPane.showMessageDialog(frame, Messages.get("update.portable.otherInstances", others), Gui.TITLE,
+						JOptionPane.INFORMATION_MESSAGE);
+				return;
+			}
+			if (confirmClose()) {
+				downloadAndApply(release, asset.get(), fileName, (dir, zip) -> {
+					final Path newDir = PortableUpdate.extract(zip, dir);
+					PortableUpdate.start(dir, newDir, appDir.get(), configDir);
+				});
+			}
+		});
+	}
+
+	/** Étape exécutée hors de l'EDT après un téléchargement réussi : lance la mise à jour (exception si impossible). */
+	@FunctionalInterface
+	private interface UpdateStep {
+		void apply(Path dir, Path file);
+	}
+
+	/**
+	 * Téléchargement dans un dossier temporaire dédié avec progression et annulation, puis étape de mise à jour hors de
+	 * l'EDT ; succès ⇒ arrêt de l'application ; échec ou annulation ⇒ dossier temporaire supprimé, erreur affichée (pas
+	 * pour une annulation), la fenêtre reste ouverte.
+	 */
+	private void downloadAndApply(final Release release, final Release.Asset asset, final String fileName, final UpdateStep step) {
 		final AtomicBoolean cancelled = new AtomicBoolean();
 		final JProgressBar bar = new JProgressBar();
 		bar.setIndeterminate(true);
@@ -597,19 +649,18 @@ final class ConfigWindow {
 			Path dir = null;
 			try {
 				dir = Files.createTempDirectory("synoRight-update-");
-				final Path setup = Updater.download(release.setup().orElseThrow(), "synoRight-" + release.version() + "-setup.exe", dir,
-						length -> SwingUtilities.invokeLater(() -> {
-							if (length > 0 && length <= Integer.MAX_VALUE) {
-								bar.setIndeterminate(false);
-								bar.setMaximum((int) length);
-							}
-						}), read -> SwingUtilities.invokeLater(() -> bar.setValue((int) Math.min(read, Integer.MAX_VALUE))),
-						cancelled::get);
-				try {
-					Updater.launch(setup);
-				} catch (final IOException e) {
-					throw new UserException(Messages.get("update.launch.failed", e.getMessage()), e);
-				}
+				final Path file = Updater.download(asset, fileName, dir, length -> SwingUtilities.invokeLater(() -> {
+					if (length > 0 && length <= Integer.MAX_VALUE) {
+						bar.setIndeterminate(false);
+						bar.setMaximum((int) length);
+					}
+				}), read -> SwingUtilities.invokeLater(() -> bar.setValue((int) Math.min(read, Integer.MAX_VALUE))), cancelled::get);
+				// téléchargement terminé : l'étape suivante (décompression, lancement) ne s'annule plus
+				SwingUtilities.invokeLater(() -> {
+					cancel.setEnabled(false);
+					bar.setIndeterminate(true);
+				});
+				step.apply(dir, file);
 				return new UpdateOutcome(true, null);
 			} catch (final Updater.DownloadCancelledException e) {
 				deleteTree(dir);
@@ -624,7 +675,7 @@ final class ConfigWindow {
 			if (outcome.error() != null) {
 				Gui.showError(frame, outcome.error());
 			} else if (outcome.launched()) {
-				// l'installeur ferme puis relance l'application : on s'arrête sans attendre
+				// l'installeur ou le script de remplacement attend la fin de l'application puis la relance : arrêt sans attendre
 				pending.clear();
 				folderTimer.stop();
 				frame.dispose();
@@ -634,7 +685,7 @@ final class ConfigWindow {
 		}, dialog::dispose);
 	}
 
-	// dossier temporaire de téléchargement : suppression sans erreur (le fichier est rendu à l'installeur seulement en cas de succès)
+	// dossier temporaire de téléchargement : suppression sans erreur (gardé seulement en cas de succès, pour l'installeur ou le script)
 	private static void deleteTree(final Path dir) {
 		if (dir == null) {
 			return;

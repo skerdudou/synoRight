@@ -61,6 +61,24 @@ public final class Updater {
 				: Mode.OPEN_PAGE;
 	}
 
+	/** Fichier à télécharger pour le mode : installeur (INSTALL), zip (PORTABLE), aucun (OPEN_PAGE). */
+	public static Optional<Release.Asset> asset(final Release release, final Mode mode) {
+		return switch (mode) {
+			case INSTALL -> release.setup();
+			case PORTABLE -> release.zip();
+			case OPEN_PAGE -> Optional.empty();
+		};
+	}
+
+	/** Nom du fichier téléchargé pour le mode (nom publié de l'asset) ; IllegalArgumentException pour OPEN_PAGE. */
+	public static String fileName(final Release release, final Mode mode) {
+		return switch (mode) {
+			case INSTALL -> Release.setupName(release.version());
+			case PORTABLE -> Release.zipName(release.version());
+			case OPEN_PAGE -> throw new IllegalArgumentException("no file to download for " + mode);
+		};
+	}
+
 	/** Ligne de commande de l'installeur : mise à jour silencieuse, fermeture puis relance de l'application. */
 	public static List<String> setupCommand(final Path setup) {
 		return List.of(setup.toString(), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/RELAUNCH");

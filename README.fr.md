@@ -43,7 +43,7 @@ synoRight synchronise les droits d'accès des dossiers de l'**espace partagé de
 
 Le **menu Windows 11** s'installe pour l'utilisateur courant, mais la première installation sur un poste demande **une seule fois une autorisation administrateur** : Windows doit approuver le certificat `CN=synoRight` qui signe le package du menu. L'invite UAC affiche « Windows PowerShell » : elle importe `synoRight.cer` (du dossier de l'application) dans le magasin « Personnes autorisées » (TrustedPeople) de l'ordinateur. Le menu classique ne demande pas de droits administrateur.
 
-**Mise à jour** : la fenêtre de configuration signale qu'une nouvelle version est disponible et peut la télécharger et l'installer. On peut aussi lancer le nouveau setup par-dessus l'ancienne version. Les menus de l'Explorateur sont réparés automatiquement.
+**Mise à jour** : la fenêtre de configuration signale qu'une nouvelle version est disponible et peut la télécharger et l'installer. On peut aussi lancer le nouveau setup par-dessus l'ancienne version. Les menus de l'Explorateur sont réparés automatiquement. Un téléchargement dont l'empreinte (SHA-256) n'est pas publiée avec la version est refusé.
 
 **Désinstallation** : Paramètres Windows > Applications > synoRight. Le désinstallateur retire les menus de l'Explorateur ; la configuration est conservée.
 
@@ -52,6 +52,8 @@ Le **menu Windows 11** s'installe pour l'utilisateur courant, mais la première 
 `synoRight-<version>-windows-x64.zip` contient la même application : le décompresser dans par exemple `C:\Program Files` (l'archive contient un dossier `synoRight` ; écrire à cet endroit demande les droits administrateur) ou dans n'importe quel dossier, puis lancer **`synoRightGui.exe`**. Le dossier `synoRight` contient `synoRight.exe` (ligne de commande), `synoRightGui.exe` (sans console) et, pour le menu Windows 11, les fichiers `synoRightMenu-<version>.dll`, `synoRight.msix` et `synoRight.cer`.
 
 Les commandes du menu pointent vers l'application à son emplacement courant : après le remplacement ou le déplacement du dossier, les menus sont réparés automatiquement au prochain démarrage de l'IHM (ou par `synoRight menu repair`).
+
+**Mise à jour** : la copie portable se met aussi à jour depuis la fenêtre de configuration. Fermer d'abord les autres fenêtres synoRight (la mise à jour est refusée tant qu'elles sont ouvertes). Le nouveau zip est téléchargé et contrôlé (taille et empreinte SHA-256 publiée ; sans empreinte publiée, le téléchargement est refusé), puis synoRight se ferme, les dossiers `app` et `runtime` et les fichiers de l'application sont remplacés, et synoRight redémarre. La configuration posée à côté de l'exe et vos autres fichiers sont conservés. Si le dossier n'est pas modifiable (par exemple sous `C:\Program Files`), Windows demande une autorisation administrateur pour la copie. Les étapes sont consignées dans `update.log`, dans le dossier de configuration.
 
 ### Jar
 

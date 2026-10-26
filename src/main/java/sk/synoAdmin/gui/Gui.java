@@ -6,12 +6,14 @@ import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.EventQueue;
 import java.awt.GraphicsEnvironment;
+import java.awt.Image;
 import java.awt.Window;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -25,6 +27,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import javax.swing.JCheckBox;
+import javax.swing.ImageIcon;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -50,6 +53,9 @@ public final class Gui {
 
 	public static final String TITLE = "synoRight";
 
+	/** Tailles des icônes de fenêtre (src/main/resources/icons, générées par native/icon/IconGenerator.java). */
+	private static final int[] ICON_SIZES = { 16, 32, 48, 64, 128, 256 };
+
 	/** Composants désactivés par des tâches en cours (EDT seulement ; Component : égalité par identité). */
 	private static final Map<Component, DisableLock> DISABLED = new WeakHashMap<>();
 
@@ -68,7 +74,21 @@ public final class Gui {
 			FlatLightLaf.setup();
 		}
 		applyLocale(Messages.language().locale());
+		// boîtes de message sans fenêtre parente : même icône que l'application
+		JOptionPane.getRootFrame().setIconImages(icons());
 		ConsoleUtil.setInteraction(new SwingInteraction());
+	}
+
+	/** Icône de l'application en plusieurs tailles (barre de titre, barre des tâches, Alt+Tab). */
+	public static List<Image> icons() {
+		final List<Image> icons = new ArrayList<>();
+		for (final int size : ICON_SIZES) {
+			final URL url = Gui.class.getResource("/icons/synoRight-" + size + ".png");
+			if (url != null) {
+				icons.add(new ImageIcon(url).getImage());
+			}
+		}
+		return icons;
 	}
 
 	/** Textes standard de Swing (Oui/Non, sélecteur de fichiers) dans la langue choisie ; formats de nombres et dates inchangés. */

@@ -190,6 +190,7 @@ final class SyncPanel extends JPanel {
 	static JFrame createWindow(final Preferences pref, final SyncPlan.Direction direction) {
 		final JFrame frame = new JFrame(Messages.get("gui.sync.windowTitle", Gui.TITLE));
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // fermeture via la garde, toujours terminée par dispose()
+		frame.setIconImages(Gui.icons());
 		final SyncPanel panel = new SyncPanel(() -> pref, direction);
 		frame.setContentPane(panel);
 		if (panel.defaultButton() != null) {

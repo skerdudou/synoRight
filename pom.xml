@@ -159,6 +159,9 @@
 										<argument>--win-console</argument>
 										<argument>--description</argument>
 										<argument>synoRight</argument>
+										<!-- icône des lanceurs, reprise par les menus de l'Explorateur (native/icon/IconGenerator.java) -->
+										<argument>--icon</argument>
+										<argument>${project.basedir}/src/main/jpackage/synoRight.ico</argument>
 										<argument>--add-launcher</argument>
 										<argument>synoRightGui=${project.basedir}/src/main/jpackage/synoRightGui.properties</argument>
 									</arguments>

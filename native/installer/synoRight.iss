@@ -25,6 +25,7 @@ CloseApplications=yes
 RestartApplications=no
 OutputBaseFilename=synoRight-{#AppVersion}-setup
 UninstallDisplayIcon={app}\synoRightGui.exe
+SetupIconFile={#SourcePath}..\..\src\main\jpackage\synoRight.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern

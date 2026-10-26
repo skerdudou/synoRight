@@ -93,10 +93,12 @@ class ApplyUpdateScriptTest {
 		return tmp.resolve("my config");
 	}
 
-	// relance prévue (journalisée avec -NoRelaunch) : exe de l'appli et configuration en cours
-	private void assertRelaunchKeepsTheConfiguration(final String log) {
-		assertTrue(log.contains("relaunch skipped (-NoRelaunch): " + appDir.resolve("synoRightGui.exe") + " -c \"" + configDir() + "\""),
-				log);
+	// relance prévue (journalisée avec -NoRelaunch) : exe de l'appli et configuration en cours ; le script normalise
+	// le dossier de configuration (forme longue), alors que %TEMP% peut être en forme courte 8.3 (agents de la CI)
+	private void assertRelaunchKeepsTheConfiguration(final String log) throws IOException {
+		final String config = Files.createDirectories(configDir()).toRealPath().toString();
+		assertTrue(log.contains("relaunch skipped (-NoRelaunch): "), log);
+		assertTrue(log.contains("synoRightGui.exe -c \"" + config + "\""), log);
 	}
 
 	@Test

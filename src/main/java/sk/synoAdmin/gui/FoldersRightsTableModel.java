@@ -39,6 +39,11 @@ final class FoldersRightsTableModel extends AbstractTableModel implements Rights
 		}
 	}
 
+	/** Chemin du dossier de la ligne (tel que reçu). */
+	String folderAt(final int row) {
+		return folders.get(row);
+	}
+
 	private FolderRights.GroupRight right(final int row, final int group) {
 		return rights.get(row).rights().get(group);
 	}

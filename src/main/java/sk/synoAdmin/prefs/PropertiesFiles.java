@@ -7,8 +7,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 
 /**
@@ -44,12 +46,27 @@ final class PropertiesFiles {
 	}
 
 	/**
-	 * Ecrit le fichier en UTF-8 (accents lisibles, pas d'échappements \\uXXXX).
+	 * Ecrit le fichier en UTF-8 (accents lisibles, pas d'échappements \\uXXXX), d'un bloc : écriture dans un fichier
+	 * temporaire du même répertoire puis remplacement, pour qu'un lecteur ou une écriture interrompue ne laisse jamais
+	 * un fichier tronqué.
 	 */
 	static void store(final Path file, final Properties prop, final String comment) throws IOException {
-		Files.createDirectories(file.toAbsolutePath().getParent());
-		try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-			prop.store(writer, comment);
+		final Path target = file.toAbsolutePath();
+		final Path dir = target.getParent();
+		Files.createDirectories(dir);
+		final Path temp = Files.createTempFile(dir, target.getFileName().toString(), ".tmp");
+		try {
+			try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+				prop.store(writer, comment);
+			}
+			try {
+				Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			} catch (final AtomicMoveNotSupportedException e) {
+				// système de fichiers sans remplacement atomique : remplacement simple
+				Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} finally {
+			Files.deleteIfExists(temp);
 		}
 	}
 }

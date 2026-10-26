@@ -11,6 +11,7 @@ import sk.synoAdmin.i18n.Messages;
  * Session Synology Photos (cookie de session, token, device id OTP), mémorisée chiffrée
  * dans un fichier à part de la configuration : la configuration reste éditable à la
  * main et copiable sur un autre poste sans y embarquer de session.
+ * Méthodes synchronisées : la session est partagée entre fils (aperçus photo et application des droits).
  */
 public final class Session {
 
@@ -71,7 +72,7 @@ public final class Session {
 	 *
 	 * @return true si la configuration contenait une session
 	 */
-	boolean importFromConfig(final Properties configProp) {
+	synchronized boolean importFromConfig(final Properties configProp) {
 		boolean found = false;
 		for (final String key : new String[] { KEY_SESSION, KEY_TOKEN, KEY_DID }) {
 			if (configProp.containsKey(key)) {
@@ -87,15 +88,15 @@ public final class Session {
 		return found;
 	}
 
-	public String getCookieSession() {
+	public synchronized String getCookieSession() {
 		return cookieSession;
 	}
 
-	public String getSynoToken() {
+	public synchronized String getSynoToken() {
 		return synoToken;
 	}
 
-	public String getCookieDid() {
+	public synchronized String getCookieDid() {
 		return cookieDid;
 	}
 
@@ -103,7 +104,7 @@ public final class Session {
 	 * Mémorise une nouvelle session ; un device id absent conserve le précédent
 	 * (il n'est renvoyé par le NAS que lors d'un login avec OTP).
 	 */
-	public void update(final String cookieSession, final String synoToken, final String cookieDid) {
+	public synchronized void update(final String cookieSession, final String synoToken, final String cookieDid) {
 		this.cookieSession = cookieSession;
 		this.synoToken = synoToken;
 		if (cookieDid != null) {
@@ -119,7 +120,7 @@ public final class Session {
 	 *
 	 * @param keepDeviceId conserve le device id (même compte : évite de redemander l'OTP)
 	 */
-	public Session transientCopy(final boolean keepDeviceId) {
+	public synchronized Session transientCopy(final boolean keepDeviceId) {
 		final Session copy = new Session(null);
 		if (keepDeviceId) {
 			copy.cookieDid = cookieDid;
@@ -130,17 +131,17 @@ public final class Session {
 	/**
 	 * Remplace la session mémorisée par une autre (typiquement une copie de travail après login).
 	 */
-	public void replaceWith(final Session other) {
-		cookieSession = other.cookieSession;
-		synoToken = other.synoToken;
-		cookieDid = other.cookieDid;
+	public synchronized void replaceWith(final Session other) {
+		cookieSession = other.getCookieSession();
+		synoToken = other.getSynoToken();
+		cookieDid = other.getCookieDid();
 		save();
 	}
 
 	/**
 	 * Oublie la session (y compris le device id : le prochain login redemandera l'OTP).
 	 */
-	public void clear() {
+	public synchronized void clear() {
 		cookieSession = null;
 		synoToken = null;
 		cookieDid = null;
@@ -154,7 +155,7 @@ public final class Session {
 		}
 	}
 
-	private void save() {
+	private synchronized void save() {
 		if (file == null) {
 			// copie de travail en mémoire
 			return;

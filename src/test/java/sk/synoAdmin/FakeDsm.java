@@ -1,5 +1,7 @@
 package sk.synoAdmin;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
@@ -11,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.imageio.ImageIO;
 import javax.net.ssl.SSLContext;
 
 import tools.jackson.databind.ObjectMapper;
@@ -33,7 +36,11 @@ public final class FakeDsm implements AutoCloseable {
 	private record Album(int id, String name, List<Integer> groupIds) {
 	}
 
+	private record Photo(int id, String fileName, boolean thumbReady) {
+	}
+
 	private final Map<Integer, List<Album>> children = new HashMap<>();
+	private final Map<Integer, List<Photo>> photos = new HashMap<>();
 	private final List<String> permissionUpdates = new CopyOnWriteArrayList<>();
 	private final AtomicInteger failingListings = new AtomicInteger();
 	private final HttpServer server;
@@ -67,6 +74,14 @@ public final class FakeDsm implements AutoCloseable {
 	public FakeDsm album(final Integer parentId, final int id, final String name, final Integer... groupIds) {
 		children.computeIfAbsent(parentId == null ? ROOT : parentId, k -> new ArrayList<>())
 				.add(new Album(id, name, List.of(groupIds)));
+		return this;
+	}
+
+	/**
+	 * Déclare un élément dans un dossier ; sa vignette est prête ou en erreur ("broken").
+	 */
+	public FakeDsm photo(final int folderId, final int id, final String fileName, final boolean thumbReady) {
+		photos.computeIfAbsent(folderId, k -> new ArrayList<>()).add(new Photo(id, fileName, thumbReady));
 		return this;
 	}
 
@@ -112,6 +127,33 @@ public final class FakeDsm implements AutoCloseable {
 					album.groupIds().forEach(gid -> permissions.addObject().put("id", gid).put("type", "group"));
 				}
 			}
+			case "SYNO.FotoTeam.Browse.Item" -> {
+				if (failingListings.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+					response.put("success", false).putObject("error").put("code", 117);
+					break;
+				}
+				final int limit = Integer.parseInt(params.getOrDefault("limit", "100"));
+				final ArrayNode list = response.putObject("data").putArray("list");
+				photos.getOrDefault(Integer.parseInt(params.get("folder_id")), List.of()).stream().limit(limit).forEach(photo -> {
+					final ObjectNode item = list.addObject().put("id", photo.id()).put("filename", photo.fileName()).put("type", "photo");
+					final String state = photo.thumbReady() ? "ready" : "broken";
+					item.putObject("additional").putObject("thumbnail").put("unit_id", photo.id()).put("cache_key", photo.id() + "_1")
+							.put("sm", state).put("xl", state);
+				});
+			}
+			case "SYNO.FotoTeam.Thumbnail" -> {
+				final boolean ready = photos.values().stream().flatMap(List::stream)
+						.anyMatch(photo -> String.valueOf(photo.id()).equals(params.get("id")) && photo.thumbReady());
+				if (ready) {
+					final byte[] jpeg = tinyJpeg();
+					exchange.getResponseHeaders().add("Content-Type", "image/jpeg");
+					exchange.sendResponseHeaders(200, jpeg.length);
+					exchange.getResponseBody().write(jpeg);
+					exchange.close();
+					return;
+				}
+				response.put("success", false).putObject("error").put("code", 120);
+			}
 			case "SYNO.FotoTeam.Sharing.FolderBatchPermission" -> permissionUpdates.add(params.get("permission"));
 			default -> response.put("success", false).putObject("error").put("code", 102);
 		}
@@ -120,6 +162,12 @@ public final class FakeDsm implements AutoCloseable {
 		exchange.sendResponseHeaders(200, bytes.length);
 		exchange.getResponseBody().write(bytes);
 		exchange.close();
+	}
+
+	private static byte[] tinyJpeg() throws IOException {
+		final ByteArrayOutputStream out = new ByteArrayOutputStream();
+		ImageIO.write(new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB), "jpg", out);
+		return out.toByteArray();
 	}
 
 	private static Map<String, String> parseForm(final String body) {

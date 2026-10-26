@@ -88,4 +88,9 @@ class FoldersRightsTableModelTest {
 		model.toggleColumn(1);
 		assertTrue(model.wanted().values().stream().noneMatch(groups -> groups.contains(FAMILLE)));
 	}
+
+	@Test
+	void folderAt_cheminDeLaLigne() {
+		assertEquals("P:\\a\\b", model().folderAt(1));
+	}
 }

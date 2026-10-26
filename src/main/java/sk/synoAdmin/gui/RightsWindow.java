@@ -106,7 +106,25 @@ final class RightsWindow {
 		final JPanel content = new JPanel(new BorderLayout(0, 8));
 		content.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 		content.add(title, BorderLayout.NORTH);
-		content.add(new JScrollPane(table), BorderLayout.CENTER);
+		// bandeau d'aperçus sous le tableau ; plusieurs dossiers : celui de la ligne sélectionnée
+		final PreviewStrip strip = new PreviewStrip(pref);
+		if (!single) {
+			strip.clear();
+		}
+		table.getSelectionModel().addListSelectionListener(e -> {
+			if (!e.getValueIsAdjusting() && table.getModel() instanceof final FoldersRightsTableModel model) {
+				final int row = table.getSelectedRow();
+				if (row < 0) {
+					strip.clear();
+				} else {
+					strip.show(model.folderAt(table.convertRowIndexToModel(row)));
+				}
+			}
+		});
+		final JPanel center = new JPanel(new BorderLayout(0, 8));
+		center.add(new JScrollPane(table), BorderLayout.CENTER);
+		center.add(strip, BorderLayout.SOUTH);
+		content.add(center, BorderLayout.CENTER);
 		content.add(bottom, BorderLayout.SOUTH);
 		frame.setContentPane(content);
 
@@ -124,6 +142,10 @@ final class RightsWindow {
 			}
 			apply.setEnabled(model.hasPendingChanges());
 			model.addTableModelListener(e -> apply.setEnabled(model.hasPendingChanges()));
+			// un seul dossier affiché : ses aperçus, une fois les droits affichés (sans effet s'il est déjà affiché)
+			if (paths.size() == 1) {
+				strip.show(paths.getFirst());
+			}
 			// dossiers écartés signalés au premier chargement seulement
 			final List<String> ignored = new ArrayList<>(skipped);
 			skipped.clear();
@@ -195,12 +217,16 @@ final class RightsWindow {
 			@Override
 			public void windowClosed(final WindowEvent e) {
 				closed.set(true); // interrompt une attente d'indexation en cours
+				strip.dispose();
 			}
 		});
+		// hauteur du bandeau (et de son espacement) en plus
+		final int stripHeight = strip.getPreferredSize().height + 8;
 		if (single) {
-			frame.setSize(520, 380);
+			frame.setSize(720, 380 + stripHeight);
 		} else {
-			frame.setSize(Math.min(1000, Math.max(680, 420 + 110 * pref.getGroups().size())), Math.min(660, 260 + 26 * folders.size()));
+			frame.setSize(Math.min(1000, Math.max(680, 420 + 110 * pref.getGroups().size())),
+					Math.min(660, 260 + 26 * folders.size()) + stripHeight);
 		}
 		frame.setLocationRelativeTo(null);
 		return frame;

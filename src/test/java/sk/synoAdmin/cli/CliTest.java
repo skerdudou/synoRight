@@ -1,6 +1,7 @@
 package sk.synoAdmin.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Paths;
@@ -89,6 +90,16 @@ class CliTest {
 		final ConfigCommands.MenuInstall install = (ConfigCommands.MenuInstall) result.subcommand().subcommand().commandSpec().userObject();
 
 		assertEquals(MenuTarget.CLASSIC, install.target());
+	}
+
+	@Test
+	void previews_hiddenFromGeneralHelpButOwnHelpWorks() {
+		final CommandLine cli = new CommandLine(new SynoRightCommand());
+
+		assertFalse(cli.getUsageMessage().contains("previews"));
+		assertTrue(cli.getSubcommands().get("previews").getUsageMessage().contains("previews"));
+		final ParseResult result = cli.parseArgs("previews", "D:\\photo\\a");
+		assertEquals("D:\\photo\\a", ((PreviewsCommand) result.subcommand().commandSpec().userObject()).folder);
 	}
 
 }

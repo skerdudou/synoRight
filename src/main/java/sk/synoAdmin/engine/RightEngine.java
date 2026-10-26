@@ -504,6 +504,11 @@ public class RightEngine {
 		return messages;
 	}
 
+	/** Client Synology (connecté par {@link #login()}), pour les aperçus photo. */
+	public SynoApiClient client() {
+		return synoClient;
+	}
+
 	/** Id Synology Photos du dossier. */
 	public int folderId(final String folder) {
 		return resolveFolder(folder).getId();

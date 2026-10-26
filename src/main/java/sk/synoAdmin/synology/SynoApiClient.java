@@ -15,7 +15,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -41,6 +45,8 @@ public class SynoApiClient {
 	private static final ObjectMapper MAPPER = new ObjectMapper();
 
 	private static final int MAX_ATTEMPTS = 3;
+	private static final String ITEM_API_VERSION = "1";
+	private static final String THUMBNAIL_API_VERSION = "2";
 	// codes d'erreur de SYNO.API.Auth
 	private static final int ERR_WRONG_PASSWORD = 400;
 	private static final int ERR_OTP_REQUIRED = 403;
@@ -316,6 +322,78 @@ public class SynoApiClient {
 		return folders;
 	}
 
+	/**
+	 * Liste les premiers éléments d'un dossier Synology Photos, avec l'état de leurs vignettes.
+	 */
+	public List<SynoPhotoItem> listItems(final int folderId, final int limit) {
+		final Map<String, String> params = new LinkedHashMap<>();
+		params.put("api", "SYNO.FotoTeam.Browse.Item");
+		params.put("method", "list");
+		params.put("version", ITEM_API_VERSION);
+		params.put("folder_id", Integer.toString(folderId));
+		params.put("offset", "0");
+		params.put("limit", Integer.toString(limit));
+		params.put("additional", "[\"thumbnail\"]");
+
+		final JsonNode response = doRequest("/webapi/entry.cgi/SYNO.FotoTeam.Browse.Item", params);
+
+		if (!isSuccess(response)) {
+			throw new UserException(Messages.get("synology.photos.readError", errorSuffix(response)));
+		}
+
+		return parseItemList(response);
+	}
+
+	static List<SynoPhotoItem> parseItemList(final JsonNode response) {
+		final List<SynoPhotoItem> items = new ArrayList<>();
+		for (final JsonNode item : response.path("data").path("list")) {
+			final JsonNode thumbnail = item.path("additional").path("thumbnail");
+			Optional<SynoPhotoItem.Thumb> thumb = Optional.empty();
+			if (thumbnail.isObject()) {
+				final Set<String> readySizes = new TreeSet<>();
+				for (final Map.Entry<String, JsonNode> size : thumbnail.properties()) {
+					if ("ready".equals(size.getValue().asString(null))) {
+						readySizes.add(size.getKey());
+					}
+				}
+				thumb = Optional.of(new SynoPhotoItem.Thumb(thumbnail.path("unit_id").asInt(), thumbnail.path("cache_key").asString(), readySizes));
+			}
+			items.add(new SynoPhotoItem(item.path("id").asInt(), item.path("filename").asString(), item.path("type").asString(), thumb));
+		}
+		return items;
+	}
+
+	/**
+	 * Télécharge une vignette ; vide si le NAS ne la fournit pas (pas prête, pas une image) ou est injoignable.
+	 */
+	public Optional<byte[]> thumbnail(final int unitId, final String cacheKey, final String size) {
+		final Map<String, String> params = new LinkedHashMap<>();
+		params.put("api", "SYNO.FotoTeam.Thumbnail");
+		params.put("method", "get");
+		params.put("version", THUMBNAIL_API_VERSION);
+		params.put("mode", "download");
+		params.put("id", Integer.toString(unitId));
+		params.put("type", "unit");
+		params.put("size", size);
+		params.put("cache_key", cacheKey);
+
+		try {
+			final HttpResponse<byte[]> response = httpClient.send(buildRequest("/webapi/entry.cgi/SYNO.FotoTeam.Thumbnail", params), HttpResponse.BodyHandlers.ofByteArray());
+			final String contentType = response.headers().firstValue("Content-Type").orElse("");
+			if (response.statusCode() != 200 || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+				LogUtil.debug("No thumbnail for " + unitId + " (" + size + "): status " + response.statusCode() + ", type " + contentType);
+				return Optional.empty();
+			}
+			return Optional.of(response.body());
+		} catch (final IOException | UserException | IllegalArgumentException e) {
+			LogUtil.debug("Thumbnail " + unitId + " (" + size + ") unavailable: " + e);
+			return Optional.empty();
+		} catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return Optional.empty();
+		}
+	}
+
 	public void setAccessRight(final String gid, final List<Folder> foldersToAddList, final List<Folder> foldersToDeleteList) {
 		final Map<String, String> params = new LinkedHashMap<>();
 		params.put("api", "SYNO.FotoTeam.Sharing.FolderBatchPermission");
@@ -361,7 +439,8 @@ public class SynoApiClient {
 		setAccessRight(gid, List.of(), Arrays.asList(folderToDelete));
 	}
 
-	private JsonNode doRequest(final String path, final Map<String, String> params) {
+	// requête POST de formulaire vers le NAS, avec le cookie et le jeton de la session
+	private HttpRequest buildRequest(final String path, final Map<String, String> params) {
 		final String body = params.entrySet().stream()
 				.map(e -> urlEncode(e.getKey()) + "=" + urlEncode(e.getValue()))
 				.collect(Collectors.joining("&"));
@@ -384,9 +463,14 @@ public class SynoApiClient {
 		if (synoToken != null) {
 			builder.header("X-SYNO-TOKEN", synoToken);
 		}
+		return builder.build();
+	}
+
+	private JsonNode doRequest(final String path, final Map<String, String> params) {
+		final HttpRequest request = buildRequest(path, params);
 
 		try {
-			final HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+			final HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 			return MAPPER.readTree(response.body());
 		} catch (final IOException | JacksonException e) {
 			// JacksonException (non contrôlée depuis Jackson 3) : réponse qui n'est pas du JSON
